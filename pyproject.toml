@@ -1,0 +1,114 @@
+[project]
+name = "ffp"
+dynamic = ["version"]
+description = "Coding for freedom - Telegram to X (Twitter) bridge"
+authors = [{ name = "Ala Eddine", email = "zerubeus@gmail.com" }]
+license = "MIT"
+readme = "README.md"
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Communications :: Chat",
+    "Topic :: Internet",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+]
+
+requires-python = ">=3.13"
+
+dependencies = [
+    "telethon>=1.37.0",
+    "tweepy>=4.14.0",
+    "python-dotenv>=1.0.1",
+    "aiohttp>=3.10.11",
+    "aiosqlite>=0.20.0",
+    "asyncpg>=0.29.0",
+    "Pillow>=11.0.0",
+    "pytz>=2024.2",
+    "cryptg>=0.4.0",
+]
+
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "black>=24.0.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+include = ["ffp/**/*.py"]
+
+[tool.ruff.lint]
+extend-select = [
+    "Q",      # Enforces consistent use of quotes (flake8-quotes)
+    "RUF100", # Checks for unused imports (ruff)
+    "RUF018", # Checks for assignments in assert statements, which might not execute in optimized runtimes (ruff) - https://docs.astral.sh/ruff/rules/assignment-in-assert/
+    "C90",    # Checks cyclomatic complexity to ensure code isn't too complex (mccabe)
+    "UP",     # Suggests upgrades to newer Python syntax or features (pyupgrade)
+    "I",      # Enforces sorting and organization of import statements (isort)
+    "D",      # Enforces conventions for docstrings (pydocstyle)
+    "TID251", # Bans certain types of relative imports for consistent import style (flake8-tidy-imports)
+]
+
+flake8-quotes = { inline-quotes = "single", multiline-quotes = "double" }
+
+mccabe = { max-complexity = 15 } # Check McCabe complexity
+
+
+ignore = [
+    "D100", # ignore missing docstring in module
+    "D102", # ignore missing docstring in public method
+    "D104", # ignore missing docstring in public package
+    "D105", # ignore missing docstring in magic methods
+    "D107", # ignore missing docstring in __init__ methods
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["ffp"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint.per-file-ignores]
+"ffp/**/*.py" = ["D", "TID251"]
+"ffp/tools/filter_tool.py" = ["D", "TID251", "C901"]
+"ffp/tools/mod_tool.py" = ["D", "TID251", "C901"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnnecessaryIsInstance = false
+reportUnnecessaryTypeIgnoreComment = true
+reportMissingModuleSource = false
+include = ["ffp"]
+venvPath = '.'
+venv = ".venv"
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning>=0.7.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
