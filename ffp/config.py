@@ -29,7 +29,6 @@ class AppConfig:
     post_interval_seconds: int
     max_retries: int
     log_level: str
-    database_path: str
     media_download_path: str
 
 
@@ -71,7 +70,6 @@ class Config:
             post_interval_seconds=int(os.getenv("POST_INTERVAL_SECONDS", "60")),
             max_retries=int(os.getenv("MAX_RETRIES", "3")),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
-            database_path=os.getenv("DATABASE_PATH", "posts.db"),
             media_download_path=os.getenv("MEDIA_DOWNLOAD_PATH", "./downloads"),
         )
 
