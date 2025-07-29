@@ -22,7 +22,6 @@ class TelegramMonitor:
     async def start(self):
         """Start the Telegram client and connect."""
         await self.client.start(phone=config.telegram.phone)
-        logger.info('Telegram client started successfully')
 
         # Register event handler
         @self.client.on(events.NewMessage(chats=self.channel_username))
