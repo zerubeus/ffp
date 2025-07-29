@@ -92,8 +92,7 @@ class TwitterClient:
 
             return tweet_id
 
-        except Exception as e:
-            logger.error(f'Error posting tweet with media: {e}')
+        except Exception:
             return None
 
     def _upload_photo(self, photo_path: str) -> list[str] | None:
