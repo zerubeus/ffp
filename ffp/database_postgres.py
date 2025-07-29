@@ -82,7 +82,6 @@ class PostgresDatabase:
                 message_text,
                 media_type,
             )
-            logger.info(f'Saved posted message: {telegram_message_id} -> {twitter_tweet_id}')
 
     async def log_error(self, telegram_message_id: int, error_message: str, error_type: str = 'general'):
         """Log an error."""
