@@ -15,7 +15,7 @@ A Telegram to X (Twitter) bridge application that automatically forwards posts f
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.13+
 - PostgreSQL 13+ (or use Docker Compose for automatic setup)
 - Telegram API credentials (api_id and api_hash)
 - X/Twitter API credentials (API keys and tokens)
@@ -38,6 +38,7 @@ cp .env.example .env
 ```
 
 3. Edit `.env` with your credentials:
+
    - Get Telegram API credentials from https://my.telegram.org
    - Get X API credentials from https://developer.twitter.com
 
@@ -59,14 +60,7 @@ cd ffp
 2. Install PostgreSQL (if not using Docker):
 
 ```bash
-# macOS
-brew install postgresql
-
-# Ubuntu/Debian
-sudo apt-get install postgresql postgresql-contrib
-
-# Create database
-createdb ffp_db
+docker compose up -d postgresql
 ```
 
 3. Run the setup (installs UV if needed and sets up the project):
@@ -149,7 +143,7 @@ psql -U ffp -d ffp_db -f scripts/init.sql
 uv run python main.py
 
 # Or using Make:
-make install  # Install dependencies  
+make install  # Install dependencies
 make run      # Run the application
 make dev      # Install with dev dependencies
 make lint     # Run linting

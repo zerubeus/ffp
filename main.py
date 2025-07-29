@@ -24,7 +24,7 @@ class TelegramToTwitterBridge:
 
     async def start(self):
         """Start the bridge."""
-        logger.info("Starting Telegram to Twitter bridge...")
+        logger.info('Starting Telegram to Twitter bridge...')
 
         # Connect to database
         await self.database.connect()
@@ -39,7 +39,7 @@ class TelegramToTwitterBridge:
         # Schedule cleanup
         asyncio.create_task(self.periodic_cleanup())
 
-        logger.info("Bridge started successfully!")
+        logger.info('Bridge started successfully!')
 
     async def process_messages(self):
         """Process messages from Telegram queue."""
@@ -52,15 +52,15 @@ class TelegramToTwitterBridge:
                 )
 
                 # Check if already posted
-                if await self.database.is_message_posted(message["id"]):
-                    logger.info(f"Message {message['id']} already posted, skipping")
+                if await self.database.is_message_posted(message['id']):
+                    logger.info(f'Message {message["id"]} already posted, skipping')
                     continue
 
                 # Process message
                 processed = self.processor.process_message(message)
 
-                if not processed["should_post"]:
-                    logger.info(f"Message {message['id']} filtered out")
+                if not processed['should_post']:
+                    logger.info(f'Message {message["id"]} filtered out')
                     continue
 
                 # Post to Twitter
@@ -69,43 +69,43 @@ class TelegramToTwitterBridge:
                 if tweet_id:
                     # Save to database
                     await self.database.save_posted_message(
-                        telegram_message_id=message["id"],
+                        telegram_message_id=message['id'],
                         twitter_tweet_id=tweet_id,
                         telegram_channel=self.telegram.channel_username,
-                        message_text=processed["text"],
-                        media_type=processed.get("media_type"),
+                        message_text=processed['text'],
+                        media_type=processed.get('media_type'),
                     )
                 else:
                     # Log error
                     await self.database.log_error(
-                        telegram_message_id=message["id"],
-                        error_message="Failed to post to Twitter",
-                        error_type="twitter_api",
+                        telegram_message_id=message['id'],
+                        error_message='Failed to post to Twitter',
+                        error_type='twitter_api',
                     )
 
             except TimeoutError:
                 # No messages in queue, continue
                 continue
             except Exception as e:
-                logger.error(f"Error processing messages: {e}")
+                logger.error(f'Error processing messages: {e}')
                 await asyncio.sleep(10)
 
     async def post_to_twitter(self, message: dict) -> str:
         """Post message to Twitter."""
         try:
-            if message.get("media_path"):
+            if message.get('media_path'):
                 tweet_id = self.twitter.post_with_media(
-                    text=message["text"],
-                    media_path=message["media_path"],
-                    media_type=message["media_type"],
+                    text=message['text'],
+                    media_path=message['media_path'],
+                    media_type=message['media_type'],
                 )
             else:
-                tweet_id = self.twitter.post_text(message["text"])
+                tweet_id = self.twitter.post_text(message['text'])
 
             return tweet_id
 
         except Exception as e:
-            logger.error(f"Error posting to Twitter: {e}")
+            logger.error(f'Error posting to Twitter: {e}')
             return None
 
     async def periodic_cleanup(self):
@@ -119,20 +119,18 @@ class TelegramToTwitterBridge:
                 posts = await self.database.get_recent_posts(limit=100)
                 errors = await self.database.get_error_count(hours=24)
 
-                logger.info(
-                    f"Stats - Recent posts: {len(posts)}, Errors (24h): {errors}"
-                )
+                logger.info(f'Stats - Recent posts: {len(posts)}, Errors (24h): {errors}')
 
                 # Wait 24 hours
                 await asyncio.sleep(86400)
 
             except Exception as e:
-                logger.error(f"Error in periodic cleanup: {e}")
+                logger.error(f'Error in periodic cleanup: {e}')
                 await asyncio.sleep(3600)
 
     async def stop(self):
         """Stop the bridge."""
-        logger.info("Stopping bridge...")
+        logger.info('Stopping bridge...')
         self.running = False
 
         # Stop Telegram client
@@ -141,7 +139,7 @@ class TelegramToTwitterBridge:
         # Close database
         await self.database.close()
 
-        logger.info("Bridge stopped")
+        logger.info('Bridge stopped')
 
 
 async def main():
@@ -150,7 +148,7 @@ async def main():
 
     # Set up signal handlers
     def signal_handler(sig, frame):
-        logger.info("Received interrupt signal")
+        logger.info('Received interrupt signal')
         asyncio.create_task(bridge.stop())
         sys.exit(0)
 
@@ -166,10 +164,10 @@ async def main():
             await asyncio.sleep(1)
 
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f'Fatal error: {e}')
         await bridge.stop()
         sys.exit(1)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())
