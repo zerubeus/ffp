@@ -100,8 +100,7 @@ class TwitterClient:
         try:
             media = self.api.media_upload(photo_path)
             return [str(media.media_id)]
-        except Exception as e:
-            logger.error(f'Error uploading photo: {e}')
+        except Exception:
             return None
 
     def _upload_video(self, video_path: str) -> list[str] | None:
