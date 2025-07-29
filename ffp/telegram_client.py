@@ -47,7 +47,6 @@ class TelegramMonitor:
                     message_data['media_type'] = media_info['type']
 
             await self.message_queue.put(message_data)
-            logger.info(f'Message {message.id} added to queue')
 
         except Exception as e:
             logger.error(f'Error processing message {message.id}: {e}')
