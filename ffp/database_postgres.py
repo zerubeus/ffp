@@ -1,10 +1,8 @@
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Any
 
 import asyncpg
-
-from ffp.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -12,22 +10,18 @@ logger = logging.getLogger(__name__)
 class PostgresDatabase:
     def __init__(self):
         self.database_url = os.getenv('DATABASE_URL', '')
-        self.pool: Optional[asyncpg.Pool] = None
+        self.pool: asyncpg.Pool | None = None
 
     async def connect(self):
         """Connect to the database and create tables if needed."""
         try:
             self.pool = await asyncpg.create_pool(
-                self.database_url,
-                min_size=1,
-                max_size=10,
-                timeout=60,
-                command_timeout=60
+                self.database_url, min_size=1, max_size=10, timeout=60, command_timeout=60
             )
             await self._create_tables()
-            logger.info(f"Connected to PostgreSQL database")
+            logger.info('Connected to PostgreSQL database')
         except Exception as e:
-            logger.error(f"Failed to connect to PostgreSQL: {e}")
+            logger.error(f'Failed to connect to PostgreSQL: {e}')
             raise
 
     async def _create_tables(self):
@@ -61,8 +55,7 @@ class PostgresDatabase:
         """Check if a message has already been posted."""
         async with self.pool.acquire() as conn:
             result = await conn.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM posted_messages WHERE telegram_message_id = $1)",
-                telegram_message_id
+                'SELECT EXISTS(SELECT 1 FROM posted_messages WHERE telegram_message_id = $1)', telegram_message_id
             )
             return result
 
@@ -83,12 +76,15 @@ class PostgresDatabase:
                  message_text, media_type)
                 VALUES ($1, $2, $3, $4, $5)
                 """,
-                telegram_message_id, twitter_tweet_id, telegram_channel, 
-                message_text, media_type
+                telegram_message_id,
+                twitter_tweet_id,
+                telegram_channel,
+                message_text,
+                media_type,
             )
-            logger.info(f"Saved posted message: {telegram_message_id} -> {twitter_tweet_id}")
+            logger.info(f'Saved posted message: {telegram_message_id} -> {twitter_tweet_id}')
 
-    async def log_error(self, telegram_message_id: int, error_message: str, error_type: str = "general"):
+    async def log_error(self, telegram_message_id: int, error_message: str, error_type: str = 'general'):
         """Log an error."""
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -97,10 +93,12 @@ class PostgresDatabase:
                 (telegram_message_id, error_message, error_type)
                 VALUES ($1, $2, $3)
                 """,
-                telegram_message_id, error_message, error_type
+                telegram_message_id,
+                error_message,
+                error_type,
             )
 
-    async def get_recent_posts(self, limit: int = 50) -> List[Dict]:
+    async def get_recent_posts(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get recent posted messages."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
@@ -111,9 +109,9 @@ class PostgresDatabase:
                 ORDER BY posted_at DESC
                 LIMIT $1
                 """,
-                limit
+                limit,
             )
-            
+
             return [dict(row) for row in rows]
 
     async def get_error_count(self, hours: int = 24) -> int:
@@ -124,7 +122,7 @@ class PostgresDatabase:
                 SELECT COUNT(*) FROM error_log
                 WHERE occurred_at > NOW() - INTERVAL $1
                 """,
-                f'{hours} hours'
+                f'{hours} hours',
             )
             return result or 0
 
@@ -136,7 +134,7 @@ class PostgresDatabase:
                 DELETE FROM posted_messages
                 WHERE posted_at < NOW() - INTERVAL $1
                 """,
-                f'{days} days'
+                f'{days} days',
             )
 
             await conn.execute(
@@ -144,13 +142,13 @@ class PostgresDatabase:
                 DELETE FROM error_log
                 WHERE occurred_at < NOW() - INTERVAL $1
                 """,
-                f'{days} days'
+                f'{days} days',
             )
 
-            logger.info(f"Cleaned up records older than {days} days")
+            logger.info(f'Cleaned up records older than {days} days')
 
     async def close(self):
         """Close database connection."""
         if self.pool:
             await self.pool.close()
-            logger.info("Database connection closed")
+            logger.info('Database connection closed')
