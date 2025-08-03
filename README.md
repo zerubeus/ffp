@@ -22,7 +22,7 @@ A Telegram to X (Twitter) bridge application that automatically forwards posts f
 
 ## Installation
 
-### Option 1: Using Docker Compose (Recommended)
+### Using Docker Compose
 
 1. Clone the repository:
 
