@@ -1,22 +1,8 @@
-import os
-import logging
-from typing import Union
-
-logger = logging.getLogger(__name__)
+from ffp.database_sqlite import SQLiteDatabase
 
 
-def get_database() -> Union['PostgresDatabase', 'SQLiteDatabase']:
+def get_database() -> SQLiteDatabase:
     """
-    Factory function to get the appropriate database instance.
-    Uses PostgreSQL if DATABASE_URL is set, otherwise falls back to SQLite.
+    Factory function to get the SQLite database instance.
     """
-    database_url = os.getenv('DATABASE_URL', '')
-    
-    if database_url and 'postgresql' in database_url:
-        from ffp.database_postgres import PostgresDatabase
-        logger.info('Using PostgreSQL database')
-        return PostgresDatabase()
-    else:
-        from ffp.database_sqlite import SQLiteDatabase
-        logger.info('Using SQLite database (local mode)')
-        return SQLiteDatabase()
+    return SQLiteDatabase()

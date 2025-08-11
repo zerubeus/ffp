@@ -1,35 +1,12 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: ffp-postgres
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-ffp}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ffp_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-ffp_db}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ffp} -d ${POSTGRES_DB:-ffp_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: ffp-app
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ffp}:${POSTGRES_PASSWORD:-ffp_secret}@postgres:5432/${POSTGRES_DB:-ffp_db}
       # Override session path to use persistent volume
       TELEGRAM_SESSION_NAME: /app/sessions/telegram_session
       MEDIA_DOWNLOAD_PATH: /app/downloads
@@ -38,10 +15,12 @@ services:
     volumes:
       # IMPORTANT: Persistent Telegram session storage
       - telegram_sessions:/app/sessions
+      # SQLite database storage
+      - sqlite_data:/app/data
       - ./downloads:/app/downloads
       - ./logs:/app/logs
     restart: unless-stopped
 
 volumes:
-  postgres_data:
   telegram_sessions:
+  sqlite_data:

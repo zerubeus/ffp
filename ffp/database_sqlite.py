@@ -1,14 +1,25 @@
 import logging
+import os
 import aiosqlite
 from typing import Any
 from datetime import datetime, timedelta
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
 class SQLiteDatabase:
-    def __init__(self, db_path: str = 'ffp.db'):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            # Use /app/data in Docker, or local directory otherwise
+            if os.path.exists('/app/data'):
+                db_dir = Path('/app/data')
+            else:
+                db_dir = Path('.')
+            db_dir.mkdir(exist_ok=True)
+            self.db_path = str(db_dir / 'ffp.db')
+        else:
+            self.db_path = db_path
         self.db = None
 
     async def connect(self):

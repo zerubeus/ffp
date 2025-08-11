@@ -7,16 +7,15 @@ A Telegram to X (Twitter) bridge application that automatically forwards posts f
 - **Automatic Message Forwarding**: Monitors Telegram channels and posts to X
 - **Media Support**: Handles photos and videos
 - **Smart Text Processing**: Adds hashtags (#FreePalestine #Palestine)
-- **Duplicate Prevention**: PostgreSQL database tracking to avoid reposting
+- **Duplicate Prevention**: SQLite database tracking to avoid reposting
 - **Error Handling**: Robust error logging and retry mechanisms
 - **Content Filtering**: Filters out spam and irrelevant content
-- **Production Ready**: PostgreSQL database with connection pooling
+- **Production Ready**: Lightweight SQLite database for reliable storage
 - **Docker Support**: Easy deployment with docker-compose
 
 ## Prerequisites
 
 - Python 3.13+
-- PostgreSQL 13+ (or use Docker Compose for automatic setup)
 - Telegram API credentials (api_id and api_hash)
 - X/Twitter API credentials (API keys and tokens)
 
@@ -42,7 +41,7 @@ cp .env.example .env
    - Get Telegram API credentials from https://my.telegram.org
    - Get X API credentials from https://developer.twitter.com
 
-4. Start the application with PostgreSQL:
+4. Start the application:
 
 ```bash
 docker-compose up -d
@@ -57,34 +56,27 @@ git clone https://github.com/yourusername/ffp.git
 cd ffp
 ```
 
-2. Install PostgreSQL (if not using Docker):
-
-```bash
-docker compose up -d postgresql
-```
-
-3. Run the setup (installs UV if needed and sets up the project):
+2. Run the setup (installs UV if needed and sets up the project):
 
 ```bash
 make setup
 ```
 
-4. Activate the virtual environment:
+3. Activate the virtual environment:
 
 ```bash
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-5. Set up configuration:
+4. Set up configuration:
 
 ```bash
 cp .env.example .env
 ```
 
-6. Edit `.env` with your credentials and database URL:
+5. Edit `.env` with your credentials:
    - Get Telegram API credentials from https://my.telegram.org
    - Get X API credentials from https://developer.twitter.com
-   - Set DATABASE_URL to your PostgreSQL connection string
 
 ## Configuration
 
@@ -103,12 +95,6 @@ X_API_SECRET=your_api_secret
 X_ACCESS_TOKEN=your_access_token
 X_ACCESS_TOKEN_SECRET=your_access_token_secret
 X_BEARER_TOKEN=your_bearer_token
-
-# PostgreSQL Configuration
-DATABASE_URL=postgresql://ffp:ffp_secret@localhost:5432/ffp_db
-POSTGRES_USER=ffp
-POSTGRES_PASSWORD=ffp_secret
-POSTGRES_DB=ffp_db
 
 # Application Settings
 POST_INTERVAL_SECONDS=60
@@ -136,9 +122,6 @@ docker-compose down
 # Install dependencies
 uv sync
 
-# Initialize database (if running PostgreSQL locally)
-psql -U ffp -d ffp_db -f scripts/init.sql
-
 # Run the application
 uv run python main.py
 
@@ -161,11 +144,9 @@ ffp/
 │   ├── telegram_client.py    # Telegram API integration
 │   ├── twitter_client.py     # X/Twitter API integration
 │   ├── message_processor.py  # Content processing
-│   ├── database_postgres.py  # PostgreSQL database operations
-│   ├── database_factory.py   # Database factory pattern
+│   ├── database_sqlite.py    # SQLite database operations
+│   ├── database_factory.py   # Database factory
 │   └── utils.py              # Utility functions
-├── scripts/
-│   └── init.sql              # Database initialization script
 ├── main.py                   # Main application entry point
 ├── docker-compose.yml        # Docker services configuration
 ├── pyproject.toml            # Project configuration and dependencies
@@ -198,18 +179,12 @@ ffp/
 
 ## Troubleshooting
 
-1. **Database Connection Issues**:
-
-   - Ensure PostgreSQL is running: `docker-compose ps`
-   - Check DATABASE_URL in your .env file
-   - Verify database credentials match docker-compose.yml
-
-2. **Authentication Issues**:
+1. **Authentication Issues**:
 
    - Ensure your API credentials are correct
    - Check that your X app has read/write permissions
 
-3. **Rate Limits**:
+2. **Rate Limits**:
 
    - The app respects X API rate limits automatically
    - Adjust POST_INTERVAL_SECONDS if needed
