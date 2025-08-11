@@ -1,6 +1,6 @@
 [project]
 name = "ffp"
-dynamic = ["version"]
+version = "1.0.0"
 description = "Coding for freedom - Telegram to X (Twitter) bridge"
 authors = [{ name = "Ala Eddine", email = "zerubeus@gmail.com" }]
 license = "MIT"
@@ -28,7 +28,7 @@ dependencies = [
     "tweepy>=4.14.0",
     "python-dotenv>=1.0.1",
     "aiohttp>=3.10.11",
-    "asyncpg>=0.29.0",
+    "aiosqlite>=0.20.0",
     "Pillow>=11.0.0",
     "pytz>=2024.2",
     "cryptg>=0.4.0",

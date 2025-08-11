@@ -1,8 +1,8 @@
-from ffp.database_postgres import PostgresDatabase
+from ffp.database_sqlite import SQLiteDatabase
 
 
-def get_database() -> PostgresDatabase:
+def get_database() -> SQLiteDatabase:
     """
-    Factory function to get the PostgreSQL database instance.
+    Factory function to get the SQLite database instance.
     """
-    return PostgresDatabase()
+    return SQLiteDatabase()

@@ -116,11 +116,9 @@ help: ## Show this help message
 
 # Docker commands
 .PHONY: docker-up
-docker-up: ## Start PostgreSQL database with Docker Compose
-	docker-compose up -d postgres
-	@echo "Waiting for PostgreSQL to be ready..."
-	@sleep 5
-	@echo "PostgreSQL is running on localhost:5432"
+docker-up: ## Start the application with Docker Compose
+	docker-compose up -d
+	@echo "Application is running in Docker"
 
 .PHONY: docker-down
 docker-down: ## Stop all Docker services
@@ -131,17 +129,9 @@ docker-clean: ## Stop and remove all Docker containers and volumes
 	docker-compose down -v
 
 .PHONY: docker-logs
-docker-logs: ## View PostgreSQL logs
-	docker-compose logs -f postgres
-
-.PHONY: docker-db
-docker-db: ## Connect to PostgreSQL database
-	docker-compose exec postgres psql -U ffp -d ffp_db
-
-.PHONY: docker-test
-docker-test: docker-up ## Run tests with PostgreSQL
-	DATABASE_URL=postgresql://ffp:ffp_secret@localhost:5432/ffp_db uv run pytest tests/
+docker-logs: ## View application logs
+	docker-compose logs -f app
 
 .PHONY: docker-run
-docker-run: docker-up ## Run the application with PostgreSQL
-	DATABASE_URL=postgresql://ffp:ffp_secret@localhost:5432/ffp_db uv run python main.py
+docker-run: ## Build and run the application with Docker
+	docker-compose up --build
