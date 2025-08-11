@@ -1,10 +1,11 @@
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 from telethon import TelegramClient, events
-from telethon.tl.types import Message, MessageMediaDocument, MessageMediaPhoto
+from telethon.tl.types import Message
 
 from ffp.config import config
 
@@ -13,15 +14,22 @@ logger = logging.getLogger(__name__)
 
 class TelegramMonitor:
     def __init__(self):
+        # Ensure session directory exists
+        session_path = Path(config.telegram.session_name)
+        session_path.parent.mkdir(parents=True, exist_ok=True)
+        
         self.client = TelegramClient(config.telegram.session_name, config.telegram.api_id, config.telegram.api_hash)
         self.channel_username = config.telegram.channel_username
-        self.media_path = Path(config.app.media_download_path)
-        self.media_path.mkdir(exist_ok=True)
         self.message_queue: asyncio.Queue = asyncio.Queue()
 
     async def start(self):
         """Start the Telegram client and connect."""
-        await self.client.start(phone=config.telegram.phone)
+        # Start with session persistence - will only ask for code on first run
+        await self.client.start(
+            phone=lambda: config.telegram.phone,
+            password=lambda: os.getenv('TELEGRAM_2FA_PASSWORD', ''),  # Optional 2FA password
+        )
+
         logger.info('Telegram client started successfully')
 
         # Register event handler
@@ -30,48 +38,24 @@ class TelegramMonitor:
             await self._process_message(event.message)
 
     async def _process_message(self, message: Message):
-        """Process incoming Telegram message."""
+        """Process incoming Telegram message - text only."""
         try:
-            message_data = {
-                'id': message.id,
-                'text': message.text or '',
-                'date': message.date,
-                'media': None,
-                'media_type': None,
-            }
+            # Only process messages with text content
+            if message.text:
+                message_data = {
+                    'id': message.id,
+                    'text': message.text,
+                    'date': message.date,
+                }
 
-            # Handle media
-            if message.media:
-                media_info = await self._download_media(message)
-                if media_info:
-                    message_data['media'] = media_info['path']
-                    message_data['media_type'] = media_info['type']
-
-            await self.message_queue.put(message_data)
-            logger.info(f'Message {message.id} added to queue')
+                await self.message_queue.put(message_data)
+                logger.info(f'Message {message.id} added to queue')
+            else:
+                logger.debug(f'Message {message.id} skipped - no text content')
 
         except Exception as e:
             logger.error(f'Error processing message {message.id}: {e}')
 
-    async def _download_media(self, message: Message) -> dict[str, str] | None:
-        """Download media from message."""
-        try:
-            if isinstance(message.media, MessageMediaPhoto):
-                file_path = await message.download_media(self.media_path)
-                return {'path': str(file_path), 'type': 'photo'}
-
-            elif isinstance(message.media, MessageMediaDocument):
-                mime_type = message.media.document.mime_type
-                if mime_type and (mime_type.startswith('image/') or mime_type.startswith('video/')):
-                    file_path = await message.download_media(self.media_path)
-                    media_type = 'video' if mime_type.startswith('video/') else 'photo'
-                    return {'path': str(file_path), 'type': media_type}
-
-            return None
-
-        except Exception as e:
-            logger.error(f'Error downloading media: {e}')
-            return None
 
     async def get_recent_messages(self, limit: int = 10) -> list[dict[str, Any]] | None:
         """Get recent messages from channel."""

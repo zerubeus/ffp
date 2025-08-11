@@ -73,7 +73,7 @@ class TelegramToTwitterBridge:
                         twitter_tweet_id=tweet_id,
                         telegram_channel=self.telegram.channel_username,
                         message_text=processed['text'],
-                        media_type=processed.get('media_type'),
+                        media_type=None,  # No media in text-only mode
                     )
                 else:
                     # Log error
@@ -91,17 +91,10 @@ class TelegramToTwitterBridge:
                 await asyncio.sleep(10)
 
     async def post_to_twitter(self, message: dict) -> str:
-        """Post message to Twitter."""
+        """Post message to Twitter - text only."""
         try:
-            if message.get('media_path'):
-                tweet_id = self.twitter.post_with_media(
-                    text=message['text'],
-                    media_path=message['media_path'],
-                    media_type=message['media_type'],
-                )
-            else:
-                tweet_id = self.twitter.post_text(message['text'])
-
+            # Always post text only
+            tweet_id = self.twitter.post_text(message['text'])
             return tweet_id
 
         except Exception as e:

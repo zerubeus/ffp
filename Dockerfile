@@ -20,12 +20,15 @@ RUN uv sync --frozen --no-dev
 # Copy application code
 COPY . .
 
-# Create downloads and logs directories
-RUN mkdir -p /app/downloads /app/logs
+# Create necessary directories including session storage
+RUN mkdir -p /app/downloads /app/logs /app/sessions
 
 # Run as non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
+
+# Set environment variable for session location
+ENV TELEGRAM_SESSION_NAME=/app/sessions/telegram_session.session
 
 # Run the application
 CMD ["uv", "run", "python", "main.py"]

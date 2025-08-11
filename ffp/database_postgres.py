@@ -120,9 +120,9 @@ class PostgresDatabase:
             result = await conn.fetchval(
                 """
                 SELECT COUNT(*) FROM error_log
-                WHERE occurred_at > NOW() - INTERVAL $1
+                WHERE occurred_at > NOW() - make_interval(hours => $1)
                 """,
-                f'{hours} hours',
+                hours,
             )
             return result or 0
 
@@ -132,17 +132,17 @@ class PostgresDatabase:
             await conn.execute(
                 """
                 DELETE FROM posted_messages
-                WHERE posted_at < NOW() - INTERVAL $1
+                WHERE posted_at < NOW() - make_interval(days => $1)
                 """,
-                f'{days} days',
+                days,
             )
 
             await conn.execute(
                 """
                 DELETE FROM error_log
-                WHERE occurred_at < NOW() - INTERVAL $1
+                WHERE occurred_at < NOW() - make_interval(days => $1)
                 """,
-                f'{days} days',
+                days,
             )
 
             logger.info(f'Cleaned up records older than {days} days')

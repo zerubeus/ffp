@@ -30,12 +30,18 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-ffp}:${POSTGRES_PASSWORD:-ffp_secret}@postgres:5432/${POSTGRES_DB:-ffp_db}
+      # Override session path to use persistent volume
+      TELEGRAM_SESSION_NAME: /app/sessions/telegram_session
+      MEDIA_DOWNLOAD_PATH: /app/downloads
     env_file:
       - .env
     volumes:
+      # IMPORTANT: Persistent Telegram session storage
+      - telegram_sessions:/app/sessions
       - ./downloads:/app/downloads
       - ./logs:/app/logs
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  telegram_sessions:

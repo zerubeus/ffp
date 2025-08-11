@@ -11,13 +11,11 @@ class MessageProcessor:
         self.max_tweet_length = 280
 
     def process_message(self, message_data: dict) -> dict:
-        """Process Telegram message for Twitter posting."""
+        """Process Telegram message for Twitter posting - text only."""
         processed = {
             'original_id': message_data['id'],
             'date': message_data['date'],
-            'text': self._process_text(message_data['text']),
-            'media_path': message_data.get('media'),
-            'media_type': message_data.get('media_type'),
+            'text': self._process_text(message_data.get('text', '')),
             'should_post': True,
         }
 
@@ -96,8 +94,8 @@ class MessageProcessor:
             if keyword in text:
                 return True
 
-        # Filter out very short messages without media
-        if len(text) < 10 and not message_data.get('media'):
+        # Filter out very short messages (text-only mode)
+        if len(text) < 10:
             return True
 
         # Filter out messages that are just links

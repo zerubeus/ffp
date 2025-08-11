@@ -47,8 +47,13 @@ test: ## Run tests
 	uv run pytest tests/
 
 .PHONY: run
-run: ## Run the application
+run: ## Run the application (uses DATABASE_URL from environment or .env)
 	uv run python main.py
+
+.PHONY: run-local
+run-local: ## Run the application locally with SQLite database
+	@echo "🚀 Starting FFP in local mode (SQLite)..."
+	@unset DATABASE_URL && uv run python main.py
 
 .PHONY: clean
 clean: ## Clean build artifacts
