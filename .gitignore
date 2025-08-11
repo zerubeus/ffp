@@ -39,7 +39,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
-*.session
+*.session*
 
 # Project specific
 session/
