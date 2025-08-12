@@ -7,20 +7,16 @@ services:
       dockerfile: Dockerfile
     container_name: ffp-app
     environment:
-      # Override session path to use persistent volume
-      TELEGRAM_SESSION_NAME: /app/sessions/telegram_session
       MEDIA_DOWNLOAD_PATH: /app/downloads
     env_file:
       - .env
     volumes:
-      # IMPORTANT: Persistent Telegram session storage
-      - telegram_sessions:/app/sessions
+      # IMPORTANT: Persistent Telegram session storage (stored at root)
+      - ./telegram_session.session:/app/telegram_session.session
       # SQLite database storage
-      - sqlite_data:/app/data
+      - ./ffp.db:/app/ffp.db
       - ./downloads:/app/downloads
       - ./logs:/app/logs
     restart: unless-stopped
 
-volumes:
-  telegram_sessions:
-  sqlite_data:
+# Named volumes no longer needed since we're using bind mounts
