@@ -17,7 +17,7 @@ class TelegramMonitor:
         # Ensure session directory exists
         session_path = Path(config.telegram.session_name)
         session_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         self.client = TelegramClient(config.telegram.session_name, config.telegram.api_id, config.telegram.api_hash)
         self.channel_username = config.telegram.channel_username
         self.message_queue: asyncio.Queue = asyncio.Queue()
@@ -55,7 +55,6 @@ class TelegramMonitor:
 
         except Exception as e:
             logger.error(f'Error processing message {message.id}: {e}')
-
 
     async def get_recent_messages(self, limit: int = 10) -> list[dict[str, Any]] | None:
         """Get recent messages from channel."""

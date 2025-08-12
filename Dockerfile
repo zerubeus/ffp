@@ -31,4 +31,4 @@ USER appuser
 ENV TELEGRAM_SESSION_NAME=/app/sessions/telegram_session.session
 
 # Run the application
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "python", "-m", "ffp.main"]
