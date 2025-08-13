@@ -13,8 +13,8 @@ class TwitterClient:
 
     def _initialize_client(self) -> tweepy.Client:
         """Initialize Tweepy Client for API v2."""
+        # Use OAuth1 for user context (required for posting)
         client = tweepy.Client(
-            bearer_token=config.twitter.bearer_token,
             consumer_key=config.twitter.api_key,
             consumer_secret=config.twitter.api_secret,
             access_token=config.twitter.access_token,
