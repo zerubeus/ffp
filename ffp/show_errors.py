@@ -1,6 +1,5 @@
 import asyncio
 import sys
-from datetime import datetime, timedelta
 
 from ffp.database_factory import get_database
 
@@ -19,34 +18,20 @@ async def show_errors(hours: int = 24, limit: int = 50):
         print(f'Total errors: {error_count}')
 
         if error_count > 0:
-            # Get detailed errors if using SQLite (direct query)
-            if hasattr(db, 'db'):  # SQLite implementation
-                cutoff_time = datetime.now() - timedelta(hours=hours)
-                cursor = await db.db.execute(
-                    """
-                    SELECT telegram_message_id, error_message, error_type, occurred_at
-                    FROM error_log
-                    WHERE occurred_at > ?
-                    ORDER BY occurred_at DESC
-                    LIMIT ?
-                    """,
-                    (cutoff_time.isoformat(), limit),
-                )
+            # Get detailed errors using the database interface
+            errors = await db.get_recent_errors(hours=hours, limit=limit)
 
-                errors = await cursor.fetchall()
+            if errors:
+                print(f'\n📋 Recent Errors (showing up to {limit}):')
+                print(f'{"=" * 50}')
 
-                if errors:
-                    print(f'\n📋 Recent Errors (showing up to {limit}):')
-                    print(f'{"=" * 50}')
-
-                    for error in errors:
-                        msg_id, err_msg, err_type, occurred_at = error
-                        print(f'\n🔴 Error at {occurred_at}')
-                        print(f'   Message ID: {msg_id}')
-                        print(f'   Type: {err_type}')
-                        print(f'   Error: {err_msg}')
-                else:
-                    print('\nNo error details available.')
+                for error in errors:
+                    print(f'\n🔴 Error at {error["occurred_at"]}')
+                    print(f'   Message ID: {error["telegram_message_id"]}')
+                    print(f'   Type: {error["error_type"]}')
+                    print(f'   Error: {error["error_message"]}')
+            else:
+                print('\nNo error details available.')
         else:
             print('\n✅ No errors found!')
 

@@ -132,6 +132,24 @@ class SQLiteDatabase:
         result = await cursor.fetchone()
         return result[0] if result else 0
 
+    async def get_recent_errors(self, hours: int = 24, limit: int = 50) -> list[dict[str, Any]]:
+        """Get recent errors from the last N hours."""
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+        cursor = await self.db.execute(
+            """
+            SELECT telegram_message_id, error_message, error_type, occurred_at
+            FROM error_log
+            WHERE occurred_at > ?
+            ORDER BY occurred_at DESC
+            LIMIT ?
+            """,
+            (cutoff_time.isoformat(), limit),
+        )
+        
+        rows = await cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        return [dict(zip(columns, row)) for row in rows]
+
     async def cleanup_old_records(self, days: int = 30):
         """Clean up old records."""
         cutoff_time = datetime.now() - timedelta(days=days)
