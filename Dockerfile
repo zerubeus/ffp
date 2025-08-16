@@ -10,9 +10,8 @@ RUN pip install --no-cache-dir uv==$UV_VERSION
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files and git info for versioning
+# Copy dependency files
 COPY pyproject.toml uv.lock README.md ./
-COPY .git .git
 
 # Install dependencies
 RUN uv sync --frozen --no-dev
