@@ -137,12 +137,12 @@ class TelegramToTwitterBridge:
 async def main():
     """Main function."""
     bridge = TelegramToTwitterBridge()
+    shutdown_event = asyncio.Event()
 
     # Set up signal handlers
     def signal_handler(sig, frame):
         logger.info('Received interrupt signal')
-        asyncio.create_task(bridge.stop())
-        sys.exit(0)
+        shutdown_event.set()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -151,9 +151,12 @@ async def main():
         # Start bridge
         await bridge.start()
 
-        # Keep running
-        while True:
-            await asyncio.sleep(1)
+        # Keep running until shutdown signal
+        await shutdown_event.wait()
+        
+        # Graceful shutdown
+        logger.info('Initiating graceful shutdown...')
+        await bridge.stop()
 
     except Exception as e:
         logger.error(f'Fatal error: {e}')
