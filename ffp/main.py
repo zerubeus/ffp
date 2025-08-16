@@ -93,7 +93,7 @@ class TelegramToTwitterBridge:
         """Post message to Twitter - text only."""
         try:
             # Always post text only
-            tweet_id = self.twitter.post_text(message['text'])
+            tweet_id = await self.twitter.post_text(message['text'])
             return tweet_id
 
         except Exception as e:
