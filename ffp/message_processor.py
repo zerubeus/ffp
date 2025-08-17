@@ -1,6 +1,8 @@
 import logging
 import re
 
+from ffp.config import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -8,7 +10,7 @@ class MessageProcessor:
     def __init__(self):
         # Hashtags to add to tweets
         self.default_hashtags = ['#FreePalestine', '#Palestine']
-        self.max_tweet_length = 280
+        self.max_tweet_length = config.app.max_tweet_length
 
     def process_message(self, message_data: dict) -> dict:
         """Process Telegram message for Twitter posting - text only."""
@@ -41,7 +43,7 @@ class MessageProcessor:
         if len(text_with_tags) > self.max_tweet_length:
             # Try with just the text
             if len(text) > self.max_tweet_length:
-                text = text[: self.max_tweet_length - 3] + '...'
+                text = text[: self.max_tweet_length - config.app.text_truncate_suffix_length] + '...'
             return text
 
         return text_with_tags
@@ -95,7 +97,7 @@ class MessageProcessor:
                 return True
 
         # Filter out very short messages (text-only mode)
-        if len(text) < 10:
+        if len(text) < config.app.min_message_length:
             return True
 
         # Filter out messages that are just links

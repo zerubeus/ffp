@@ -30,6 +30,21 @@ class AppConfig:
     max_retries: int
     log_level: str
     media_download_path: str
+    # Cleanup intervals
+    cleanup_interval_hours: int
+    retry_delay_seconds: int
+    cleanup_old_records_days: int
+    # Database query limits
+    recent_posts_limit: int
+    error_count_hours: int
+    error_display_limit: int
+    error_display_hours: int
+    # Message processing
+    min_message_length: int
+    max_tweet_length: int
+    text_truncate_suffix_length: int
+    # Display formatting
+    separator_line_length: int
 
 
 class Config:
@@ -71,6 +86,21 @@ class Config:
             max_retries=int(os.getenv('MAX_RETRIES', '3')),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
             media_download_path=os.getenv('MEDIA_DOWNLOAD_PATH', './downloads'),
+            # Cleanup intervals (seconds/hours/days)
+            cleanup_interval_hours=int(os.getenv('CLEANUP_INTERVAL_HOURS', '24')),
+            retry_delay_seconds=int(os.getenv('RETRY_DELAY_SECONDS', '10')),
+            cleanup_old_records_days=int(os.getenv('CLEANUP_OLD_RECORDS_DAYS', '30')),
+            # Database query limits
+            recent_posts_limit=int(os.getenv('RECENT_POSTS_LIMIT', '100')),
+            error_count_hours=int(os.getenv('ERROR_COUNT_HOURS', '24')),
+            error_display_limit=int(os.getenv('ERROR_DISPLAY_LIMIT', '50')),
+            error_display_hours=int(os.getenv('ERROR_DISPLAY_HOURS', '24')),
+            # Message processing
+            min_message_length=int(os.getenv('MIN_MESSAGE_LENGTH', '10')),
+            max_tweet_length=int(os.getenv('MAX_TWEET_LENGTH', '280')),
+            text_truncate_suffix_length=int(os.getenv('TEXT_TRUNCATE_SUFFIX_LENGTH', '3')),
+            # Display formatting
+            separator_line_length=int(os.getenv('SEPARATOR_LINE_LENGTH', '50')),
         )
 
 

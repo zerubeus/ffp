@@ -87,7 +87,7 @@ class TelegramToTwitterBridge:
                 continue
             except Exception as e:
                 logger.error(f'Error processing messages: {e}')
-                await asyncio.sleep(10)
+                await asyncio.sleep(config.app.retry_delay_seconds)
 
     async def post_to_twitter(self, message: dict) -> str:
         """Post message to Twitter - text only."""
@@ -105,16 +105,16 @@ class TelegramToTwitterBridge:
         while self.running:
             try:
                 # Clean up old database records
-                await self.database.cleanup_old_records(days=30)
+                await self.database.cleanup_old_records(days=config.app.cleanup_old_records_days)
 
                 # Log statistics
-                posts = await self.database.get_recent_posts(limit=100)
-                errors = await self.database.get_error_count(hours=24)
+                posts = await self.database.get_recent_posts(limit=config.app.recent_posts_limit)
+                errors = await self.database.get_error_count(hours=config.app.error_count_hours)
 
-                logger.info(f'Stats - Recent posts: {len(posts)}, Errors (24h): {errors}')
+                logger.info(f'Stats - Recent posts: {len(posts)}, Errors ({config.app.error_count_hours}h): {errors}')
 
-                # Wait 24 hours
-                await asyncio.sleep(86400)
+                # Wait configured cleanup interval
+                await asyncio.sleep(config.app.cleanup_interval_hours * 3600)
 
             except Exception as e:
                 logger.error(f'Error in periodic cleanup: {e}')
