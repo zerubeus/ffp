@@ -25,7 +25,7 @@ class TwitterClient:
         logger.info('Twitter API v2 client initialized')
         return client
 
-    def post_text(self, text: str) -> str | None:
+    async def post_text(self, text: str) -> str | None:
         """Post a text-only tweet."""
         try:
             # Truncate text if too long (280 characters for Twitter)

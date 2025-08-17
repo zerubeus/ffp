@@ -29,13 +29,13 @@ dev: .uv ## Install with development dependencies
 
 .PHONY: format
 format: ## Format the code
-	uv run ruff format src/
-	uv run ruff check --fix --fix-only src/
+	uv run ruff format ffp/
+	uv run ruff check --fix --fix-only ffp/
 
 .PHONY: lint
 lint: ## Lint the code
-	uv run ruff format --check src/
-	uv run ruff check src/
+	uv run ruff format --check ffp/
+	uv run ruff check ffp/
 
 .PHONY: typecheck
 typecheck: ## Run type checking

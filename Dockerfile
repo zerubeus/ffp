@@ -27,7 +27,7 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Set environment variable for session location
-ENV TELEGRAM_SESSION_NAME=/app/sessions/telegram_session.session
+ENV TELEGRAM_SESSION_NAME=/app/telegram_session.session
 
 # Run the application
 CMD ["uv", "run", "python", "-m", "ffp.main"]
