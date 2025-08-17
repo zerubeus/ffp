@@ -29,13 +29,13 @@ dev: .uv ## Install with development dependencies
 
 .PHONY: format
 format: ## Format the code
-	uv run ruff format src/
-	uv run ruff check --fix --fix-only src/
+	uv run ruff format ffp/
+	uv run ruff check --fix --fix-only ffp/
 
 .PHONY: lint
 lint: ## Lint the code
-	uv run ruff format --check src/
-	uv run ruff check src/
+	uv run ruff format --check ffp/
+	uv run ruff check ffp/
 
 .PHONY: typecheck
 typecheck: ## Run type checking
@@ -48,7 +48,7 @@ test: ## Run tests
 
 .PHONY: run
 run: ## Run the application
-	uv run python main.py
+	uv run python -m ffp.main
 
 .PHONY: clean
 clean: ## Clean build artifacts
@@ -135,3 +135,11 @@ docker-logs: ## View application logs
 .PHONY: docker-run
 docker-run: ## Build and run the application with Docker
 	docker-compose up --build
+
+.PHONY: errors
+errors: ## Display database errors from the last 24 hours
+	@uv run python -m ffp.show_errors
+
+.PHONY: errors-all
+errors-all: ## Display all database errors from the last 7 days
+	@uv run python -m ffp.show_errors --hours 168 --limit 100

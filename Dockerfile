@@ -10,9 +10,8 @@ RUN pip install --no-cache-dir uv==$UV_VERSION
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files and git info for versioning
+# Copy dependency files
 COPY pyproject.toml uv.lock README.md ./
-COPY .git .git
 
 # Install dependencies
 RUN uv sync --frozen --no-dev
@@ -28,7 +27,7 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Set environment variable for session location
-ENV TELEGRAM_SESSION_NAME=/app/sessions/telegram_session.session
+ENV TELEGRAM_SESSION_NAME=/app/telegram_session.session
 
 # Run the application
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "python", "-m", "ffp.main"]
