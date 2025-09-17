@@ -6,6 +6,9 @@ from ffp.config.config import config
 logger = logging.getLogger(__name__)
 
 
+print('hello, just to trigger code review')
+
+
 class MessageProcessor:
     def __init__(self):
         # Hashtags to add to tweets
