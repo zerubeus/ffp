@@ -1,15 +1,15 @@
 # Coding for Freedom - FFP
 
-A multi-purpose application suite for freedom of information and fact-checking initiatives. Currently includes a Telegram to X (Twitter) bridge bot, with plans to expand with AI-powered fact-checking agents and other tools.
-
 ## Components
 
 ### 1. Telegram to X Bridge Bot
+
 Automatically forwards posts from Telegram channels to Twitter/X with smart filtering and content processing.
 
 **[📖 View detailed documentation](docs/x_telegram_bot.md)**
 
 ### 2. Fact-Check Agent (Planned)
+
 AI-powered agent using LLMs to verify and fact-check information from various sources.
 
 **[📖 View documentation](docs/fact_check_agent.md)**
@@ -17,6 +17,7 @@ AI-powered agent using LLMs to verify and fact-check information from various so
 ## Quick Start
 
 ### Prerequisites
+
 - Python 3.13+
 - Docker and Docker Compose (for containerized deployment)
 

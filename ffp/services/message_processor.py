@@ -1,9 +1,12 @@
 import logging
 import re
 
-from ffp.config import config
+from ffp.config.config import config
 
 logger = logging.getLogger(__name__)
+
+
+print('hello, just to trigger code review')
 
 
 class MessageProcessor:

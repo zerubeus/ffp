@@ -7,7 +7,7 @@ from typing import Any
 from telethon import TelegramClient, events
 from telethon.tl.types import Message
 
-from ffp.config import config
+from ffp.config.config import config
 
 logger = logging.getLogger(__name__)
 

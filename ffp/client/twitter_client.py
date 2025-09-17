@@ -2,7 +2,7 @@ import logging
 
 import tweepy
 
-from ffp.config import config
+from ffp.config.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,6 @@ class TwitterClient:
         except Exception as e:
             logger.error(f'Error posting tweet: {e}')
             return None
-
 
     def check_rate_limits(self) -> dict[str, int]:
         """Check current rate limits."""

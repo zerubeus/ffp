@@ -1,8 +1,8 @@
 import asyncio
 import sys
 
-from ffp.config import config
-from ffp.database_factory import get_database
+from ffp.config.config import config
+from ffp.database.database_factory import get_database
 
 
 async def show_errors(hours: int = None, limit: int = None):
@@ -12,7 +12,7 @@ async def show_errors(hours: int = None, limit: int = None):
         hours = config.app.error_display_hours
     if limit is None:
         limit = config.app.error_display_limit
-        
+
     db = get_database()
 
     try:
@@ -55,8 +55,18 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='Display database errors')
-    parser.add_argument('--hours', type=int, default=config.app.error_display_hours, help=f'Number of hours to look back (default: {config.app.error_display_hours})')
-    parser.add_argument('--limit', type=int, default=config.app.error_display_limit, help=f'Maximum number of errors to display (default: {config.app.error_display_limit})')
+    parser.add_argument(
+        '--hours',
+        type=int,
+        default=config.app.error_display_hours,
+        help=f'Number of hours to look back (default: {config.app.error_display_hours})',
+    )
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=config.app.error_display_limit,
+        help=f'Maximum number of errors to display (default: {config.app.error_display_limit})',
+    )
 
     args = parser.parse_args()
 

@@ -1,4 +1,4 @@
-from ffp.database_sqlite import SQLiteDatabase
+from ffp.database.database_sqlite import SQLiteDatabase
 
 
 def get_database() -> SQLiteDatabase:
