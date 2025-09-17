@@ -2,11 +2,11 @@ import asyncio
 import signal
 import sys
 
-from ffp.config import config
-from ffp.database_factory import get_database
-from ffp.message_processor import MessageProcessor
-from ffp.telegram_client import TelegramMonitor
-from ffp.twitter_client import TwitterClient
+from ffp.client.telegram_client import TelegramMonitor
+from ffp.client.twitter_client import TwitterClient
+from ffp.config.config import config
+from ffp.database.database_factory import get_database
+from ffp.services.message_processor import MessageProcessor
 from ffp.utils import setup_logging
 
 # Set up logging
@@ -153,7 +153,7 @@ async def main():
 
         # Keep running until shutdown signal
         await shutdown_event.wait()
-        
+
         # Graceful shutdown
         logger.info('Initiating graceful shutdown...')
         await bridge.stop()

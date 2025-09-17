@@ -1,7 +1,7 @@
 import logging
 import re
 
-from ffp.config import config
+from ffp.config.config import config
 
 logger = logging.getLogger(__name__)
 
