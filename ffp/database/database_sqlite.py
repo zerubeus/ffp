@@ -1,9 +1,10 @@
 import logging
 import os
-import aiosqlite
-from typing import Any
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
+
+import aiosqlite
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +57,13 @@ class SQLiteDatabase:
                 occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         await self.db.commit()
 
     async def is_message_posted(self, telegram_message_id: int) -> bool:
         """Check if a message has already been posted."""
         cursor = await self.db.execute(
-            'SELECT 1 FROM posted_messages WHERE telegram_message_id = ?', 
-            (telegram_message_id,)
+            'SELECT 1 FROM posted_messages WHERE telegram_message_id = ?', (telegram_message_id,)
         )
         result = await cursor.fetchone()
         return result is not None
@@ -84,8 +84,7 @@ class SQLiteDatabase:
              message_text, media_type)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (telegram_message_id, twitter_tweet_id, telegram_channel, 
-             message_text, media_type)
+            (telegram_message_id, twitter_tweet_id, telegram_channel, message_text, media_type),
         )
         await self.db.commit()
         logger.info(f'Saved posted message: {telegram_message_id} -> {twitter_tweet_id}')
@@ -98,7 +97,7 @@ class SQLiteDatabase:
             (telegram_message_id, error_message, error_type)
             VALUES (?, ?, ?)
             """,
-            (telegram_message_id, error_message, error_type)
+            (telegram_message_id, error_message, error_type),
         )
         await self.db.commit()
 
@@ -112,9 +111,9 @@ class SQLiteDatabase:
             ORDER BY posted_at DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         )
-        
+
         rows = await cursor.fetchall()
         columns = [description[0] for description in cursor.description]
         return [dict(zip(columns, row)) for row in rows]
@@ -127,7 +126,7 @@ class SQLiteDatabase:
             SELECT COUNT(*) FROM error_log
             WHERE occurred_at > ?
             """,
-            (cutoff_time.isoformat(),)
+            (cutoff_time.isoformat(),),
         )
         result = await cursor.fetchone()
         return result[0] if result else 0
@@ -145,7 +144,7 @@ class SQLiteDatabase:
             """,
             (cutoff_time.isoformat(), limit),
         )
-        
+
         rows = await cursor.fetchall()
         columns = [description[0] for description in cursor.description]
         return [dict(zip(columns, row)) for row in rows]
@@ -153,13 +152,13 @@ class SQLiteDatabase:
     async def cleanup_old_records(self, days: int = 30):
         """Clean up old records."""
         cutoff_time = datetime.now() - timedelta(days=days)
-        
+
         await self.db.execute(
             """
             DELETE FROM posted_messages
             WHERE posted_at < ?
             """,
-            (cutoff_time.isoformat(),)
+            (cutoff_time.isoformat(),),
         )
 
         await self.db.execute(
@@ -167,9 +166,9 @@ class SQLiteDatabase:
             DELETE FROM error_log
             WHERE occurred_at < ?
             """,
-            (cutoff_time.isoformat(),)
+            (cutoff_time.isoformat(),),
         )
-        
+
         await self.db.commit()
         logger.info(f'Cleaned up records older than {days} days')
 
