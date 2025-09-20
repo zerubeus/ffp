@@ -5,7 +5,7 @@ Database integration for fact-checking agent using SQLite.
 import hashlib
 import json
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiosqlite
 
@@ -158,7 +158,7 @@ class FactCheckDatabase:
         normalized = claim_text.lower().strip()
         return hashlib.sha256(normalized.encode()).hexdigest()
 
-    async def lookup_claim(self, claim_text: str) -> Optional[FactCheckVerdict]:
+    async def lookup_claim(self, claim_text: str) -> FactCheckVerdict | None:
         """Look up a previously verified claim."""
         claim_hash = self._hash_claim(claim_text)
 
@@ -320,7 +320,7 @@ class FactCheckDatabase:
             ),
         )
 
-    async def get_analysis_history(self, days: int = 7) -> List[Dict[str, Any]]:
+    async def get_analysis_history(self, days: int = 7) -> list[dict[str, Any]]:
         """Get recent analysis history."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
@@ -347,7 +347,7 @@ class FactCheckDatabase:
                     for row in rows
                 ]
 
-    async def get_cache_statistics(self) -> Dict[str, Any]:
+    async def get_cache_statistics(self) -> dict[str, Any]:
         """Get cache hit statistics."""
         async with aiosqlite.connect(self.db_path) as db:
             # Total cached claims
@@ -422,7 +422,7 @@ class FactCheckDatabase:
 
             await db.commit()
 
-    async def record_daily_metrics(self, metrics: Dict[str, Any]):
+    async def record_daily_metrics(self, metrics: dict[str, Any]):
         """Record daily performance metrics."""
         today = datetime.now().date()
 
@@ -448,7 +448,7 @@ class FactCheckDatabase:
             )
             await db.commit()
 
-    async def get_trending_claims(self, days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_trending_claims(self, days: int = 7, limit: int = 10) -> list[dict[str, Any]]:
         """Get trending/frequently appearing claims."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
