@@ -2,7 +2,7 @@
 Data models for the fact-checking agent.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
@@ -86,7 +86,7 @@ class FactCheckVerdict(BaseModel):
     sources_consulted: List[str] = Field(..., description='URLs of sources checked')
     limitations: Optional[str] = Field(None, description='Limitations in verification')
     context_needed: Optional[str] = Field(None, description='Additional context needed')
-    verification_timestamp: datetime = Field(default_factory=datetime.utcnow)
+    verification_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sensitive_topic: bool = Field(default=False, description='Whether claim involves sensitive topic')
 
 
@@ -99,7 +99,7 @@ class PostAnalysis(BaseModel):
     claims: List[Claim]
     verdicts: List[FactCheckVerdict]
     overall_credibility: ConfidenceLevel
-    analysis_timestamp: datetime = Field(default_factory=datetime.utcnow)
+    analysis_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     potential_misinformation: bool = Field(default=False)
     requires_human_review: bool = Field(default=False)
     topic_sensitivity: str = Field(default='normal')  # "normal", "sensitive", "highly_sensitive"

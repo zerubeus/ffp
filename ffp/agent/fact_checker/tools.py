@@ -4,7 +4,7 @@ Verification tools for fact-checking claims using multiple sources.
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import aiohttp
 
@@ -18,7 +18,7 @@ class WebSearchTool:
         self.api_key = api_key
         self.base_url = 'https://api.bing.microsoft.com/v7.0/search'
 
-    async def search(self, query: str, num_results: int = 10) -> List[Dict[str, Any]]:
+    async def search(self, query: str, num_results: int = 10) -> list[dict[str, Any]]:
         """Search the web for information about a claim."""
         if not self.api_key:
             # Fallback to mock results for testing
@@ -44,7 +44,7 @@ class WebSearchTool:
         except Exception:
             return self._mock_search_results(query, num_results)
 
-    def _mock_search_results(self, query: str, num_results: int) -> List[Dict[str, Any]]:
+    def _mock_search_results(self, query: str, num_results: int) -> list[dict[str, Any]]:
         """Mock search results for testing when API is not available."""
         return [
             {
@@ -88,9 +88,9 @@ class FactCheckingSitesTool:
     def __init__(self, web_search: WebSearchTool):
         self.web_search = web_search
 
-    async def search_fact_checkers(self, claim: str) -> List[EvidenceSource]:
+    async def search_fact_checkers(self, claim: str) -> list[EvidenceSource]:
         """Search fact-checking sites for existing verifications."""
-        sources = []
+        sources: list[EvidenceSource] = []
 
         # Search general fact-checking sites
         for site, info in self.FACT_CHECK_SITES.items():
@@ -102,8 +102,8 @@ class FactCheckingSitesTool:
                     url=result['url'],
                     title=result['name'],
                     domain=site,
-                    credibility_score=info['credibility'],
-                    bias_rating=info['bias'],
+                    credibility_score=float(info['credibility']),
+                    bias_rating=str(info['bias']),
                     relevant_excerpt=result.get('snippet', ''),
                     source_type='fact_checker',
                     publication_date=self._parse_date(result.get('datePublished')),
@@ -112,9 +112,9 @@ class FactCheckingSitesTool:
 
         return sources
 
-    async def search_palestine_sources(self, claim: str) -> List[EvidenceSource]:
+    async def search_palestine_sources(self, claim: str) -> list[EvidenceSource]:
         """Search Palestine/Israel specialized sources."""
-        sources = []
+        sources: list[EvidenceSource] = []
 
         for site, info in self.PALESTINE_SOURCES.items():
             query = f'site:{site} {claim}'
@@ -125,17 +125,17 @@ class FactCheckingSitesTool:
                     url=result['url'],
                     title=result['name'],
                     domain=site,
-                    credibility_score=info['credibility'],
-                    bias_rating=info['bias'],
+                    credibility_score=float(info['credibility']),
+                    bias_rating=str(info['bias']),
                     relevant_excerpt=result.get('snippet', ''),
-                    source_type=info['type'],
+                    source_type=str(info['type']),
                     publication_date=self._parse_date(result.get('datePublished')),
                 )
                 sources.append(source)
 
         return sources
 
-    async def search_news_sources(self, claim: str) -> List[EvidenceSource]:
+    async def search_news_sources(self, claim: str) -> list[EvidenceSource]:
         """Search reputable news sources."""
         news_sites = [
             'bbc.com',
@@ -150,7 +150,7 @@ class FactCheckingSitesTool:
             'aa.com.tr',
         ]
 
-        sources = []
+        sources: list[EvidenceSource] = []
         for site in news_sites[:5]:  # Limit to prevent too many requests
             query = f'site:{site} {claim}'
             results = await self.web_search.search(query, num_results=2)
@@ -226,7 +226,7 @@ class FactCheckingSitesTool:
 class EvidenceAnalyzer:
     """Analyzes collected evidence to form conclusions."""
 
-    def analyze_evidence(self, sources: List[EvidenceSource]) -> Evidence:
+    def analyze_evidence(self, sources: list[EvidenceSource]) -> Evidence:
         """Analyze collected evidence sources."""
         if not sources:
             return Evidence(claim_id='', sources=[], overall_confidence=ConfidenceLevel.INSUFFICIENT)
@@ -270,7 +270,7 @@ class EvidenceAnalyzer:
             source_diversity_score=diversity_score,
         )
 
-    def _detect_conflicts(self, sources: List[EvidenceSource]) -> bool:
+    def _detect_conflicts(self, sources: list[EvidenceSource]) -> bool:
         """Detect if sources contradict each other."""
         # Simple conflict detection - could be enhanced with NLP
         excerpts = [source.relevant_excerpt.lower() for source in sources]
@@ -283,7 +283,7 @@ class EvidenceAnalyzer:
 
         return has_positive and has_negative
 
-    def get_consensus_verdict(self, sources: List[EvidenceSource]) -> str:
+    def get_consensus_verdict(self, sources: list[EvidenceSource]) -> str:
         """Determine consensus verdict from sources."""
         if not sources:
             return 'UNVERIFIABLE'
@@ -320,7 +320,7 @@ class VerificationOrchestrator:
 
     async def verify_claim(self, claim_text: str, claim_type: str) -> Evidence:
         """Verify a claim using multiple sources."""
-        all_sources = []
+        all_sources: list[EvidenceSource] = []
 
         # Run searches in parallel for efficiency
         search_tasks = [
@@ -350,10 +350,10 @@ class VerificationOrchestrator:
 
         return evidence
 
-    def _deduplicate_sources(self, sources: List[EvidenceSource]) -> List[EvidenceSource]:
+    def _deduplicate_sources(self, sources: list[EvidenceSource]) -> list[EvidenceSource]:
         """Remove duplicate sources based on URL."""
-        seen_urls = set()
-        unique_sources = []
+        seen_urls: set[str] = set()
+        unique_sources: list[EvidenceSource] = []
 
         for source in sources:
             if source.url not in seen_urls:

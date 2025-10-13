@@ -63,7 +63,7 @@ class ClaimExtractor:
         """Extract factual claims from input text with Palestine/Israel context awareness."""
         # Split text into sentences for analysis
         sentences = self._split_sentences(text)
-        claims = []
+        claims: list[Claim] = []
 
         for sentence in sentences:
             if self._is_factual_claim(sentence):
@@ -245,11 +245,11 @@ class ClaimExtractor:
 
     def _extract_entities(self, text: str) -> list[str]:
         """Extract named entities from text."""
-        entities = []
+        entities: list[str] = []
         text_lower = text.lower()
 
         # Extract Palestine-related entities
-        for category, keywords in self.palestine_keywords.items():
+        for _, keywords in self.palestine_keywords.items():
             for keyword in keywords:
                 if keyword in text_lower:
                     entities.append(keyword.title())

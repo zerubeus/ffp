@@ -224,23 +224,43 @@ flowchart LR
 
 ## Core Architecture
 
-### 1. Agent Framework (Claude Code SDK)
+### 1. Agent Framework (PydanticAI)
 
-The agent uses Claude Code SDK for structured AI interactions with specialized fact-checking capabilities:
+The agent uses PydanticAI for structured AI interactions with specialized fact-checking capabilities:
 
 ```python
-from claude_code_sdk import ClaudeCodeOptions, query
-from pydantic import BaseModel
-from typing import List, Optional, Union
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from dataclasses import dataclass
+from typing import List, Optional
+
+@dataclass
+class FactCheckDependencies:
+    """Dependencies for the fact-checking agent."""
+    claim: Claim
+    context: PalestineFactCheckContext
+    evidence: Evidence
+    verifier: VerificationOrchestrator
+    database: FactCheckDatabase
+
+class VerdictOutput(BaseModel):
+    """Structured output for fact-checking verdict."""
+    verdict: str = Field(description='Verdict: TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING')
+    confidence: str = Field(description='Confidence level: HIGH/MEDIUM/LOW/INSUFFICIENT')
+    explanation: str = Field(description='Detailed explanation', min_length=100)
+    evidence_summary: str = Field(description='Summary of evidence found')
+    limitations: Optional[str] = Field(default=None)
+    context_needed: Optional[str] = Field(default=None)
 
 class PalestineFactCheckAgent:
     """Main fact-checking agent orchestrating all verification processes."""
 
     def __init__(self, api_key: Optional[str] = None, db_path: str = 'fact_check.db'):
-        self.claude_options = ClaudeCodeOptions(
-            system_prompt=self._get_fact_check_prompt(),
-            permission_mode='acceptEdits',
-            cwd='.'
+        self.agent = Agent(
+            'anthropic:claude-3-sonnet',
+            deps_type=FactCheckDependencies,
+            result_type=VerdictOutput,
+            system_prompt=self._get_fact_check_prompt()
         )
 
     def _get_fact_check_prompt(self) -> str:
@@ -539,7 +559,7 @@ class KnowledgeBase:
 ### 5. Main Agent Orchestration
 
 ```python
-from claude_code_sdk import ClaudeCodeOptions, query
+from pydantic_ai import Agent, RunContext
 from typing import List, Optional
 import uuid
 
@@ -551,12 +571,16 @@ class PalestineFactCheckAgent:
         self.verifier = VerificationOrchestrator(api_key)
         self.database = FactCheckDatabase(db_path)
 
-        # Claude Code SDK options with specialized Palestine fact-checking prompt
-        self.claude_options = ClaudeCodeOptions(
-            system_prompt=self._get_fact_check_prompt(),
-            permission_mode='acceptEdits',
-            cwd='.'
+        # Initialize PydanticAI agent with specialized fact-checking capabilities
+        self.agent = Agent(
+            'anthropic:claude-3-sonnet',
+            deps_type=FactCheckDependencies,
+            result_type=VerdictOutput,
+            system_prompt=self._get_fact_check_prompt()
         )
+
+        # Register dynamic instructions
+        self._setup_dynamic_instructions()
 
     def _get_fact_check_prompt(self) -> str:
         """Get the specialized fact-checking prompt for Palestine/Israel content."""
@@ -570,12 +594,31 @@ class PalestineFactCheckAgent:
         6. Provide clear, evidence-based verdicts
         """
 
+    def _setup_dynamic_instructions(self):
+        """Set up dynamic instructions for context-aware fact-checking."""
+
+        @self.agent.system_prompt
+        async def add_context_info(ctx: RunContext[FactCheckDependencies]) -> str:
+            """Add context-specific instructions based on the claim type."""
+            claim = ctx.deps.claim
+            context = ctx.deps.context
+
+            instructions = []
+
+            if claim.claim_type == ClaimType.CASUALTY:
+                instructions.append('Pay special attention to casualty figure verification.')
+
+            if context.involves_settlements:
+                instructions.append('Verify settlement-related claims against UN monitoring reports.')
+
+            return '\n'.join(instructions) if instructions else ''
+
     async def extract_claims(self, post_text: str) -> List[Claim]:
         """Extract factual claims from a social media post."""
         return await self.claim_extractor.extract_claims(post_text)
 
-    async def verify_claim_with_claude(self, claim: Claim, context: PalestineFactCheckContext) -> FactCheckVerdict:
-        """Verify a single claim using Claude and external sources."""
+    async def verify_claim_with_pydantic(self, claim: Claim, context: PalestineFactCheckContext) -> FactCheckVerdict:
+        """Verify a single claim using PydanticAI and external sources."""
 
         # Check database cache first
         cached_verdict = await self.database.lookup_claim(claim.text)
@@ -585,32 +628,45 @@ class PalestineFactCheckAgent:
         # Gather evidence from external sources
         evidence = await self.verifier.verify_claim(claim.text, claim.claim_type.value)
 
-        # Prepare context for Claude
-        context_info = self._format_context_for_claude(claim, context, evidence)
+        # Create dependencies for the agent
+        deps = FactCheckDependencies(
+            claim=claim,
+            context=context,
+            evidence=evidence,
+            verifier=self.verifier,
+            database=self.database
+        )
 
-        # Query Claude for fact-checking analysis
+        # Prepare the prompt for the agent
         prompt = f'''Fact-check this claim: "{claim.text}"
 
-Context: {context_info}
+Context: {self._format_context_for_agent(claim, context, evidence)}
 
-Evidence found: {self._format_evidence_for_claude(evidence)}
+Evidence found: {self._format_evidence_for_agent(evidence)}
 
 Please provide a structured fact-check verdict with:
 1. Verdict (TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING)
 2. Confidence level (HIGH/MEDIUM/LOW/INSUFFICIENT)
 3. Detailed explanation (minimum 100 words)
 4. Evidence summary
-5. Any limitations in verification
-
-Format your response as JSON with these exact keys: verdict, confidence, explanation, evidence_summary, limitations'''
+5. Any limitations in verification'''
 
         try:
-            response_text = ''
-            async for message in query(prompt=prompt, options=self.claude_options):
-                response_text += str(message)
+            # Run the PydanticAI agent
+            result = await self.agent.run(prompt, deps=deps)
 
-            # Parse Claude's response and create verdict
-            verdict = self._parse_claude_response(response_text, claim, evidence)
+            # Convert the structured output to FactCheckVerdict
+            verdict = FactCheckVerdict(
+                claim_id=claim.id,
+                verdict=result.data.verdict,
+                confidence=ConfidenceLevel(result.data.confidence.lower()),
+                explanation=result.data.explanation,
+                evidence_summary=result.data.evidence_summary,
+                sources_consulted=[s.url for s in evidence.sources],
+                limitations=result.data.limitations,
+                context_needed=result.data.context_needed,
+                sensitive_topic=self._is_sensitive_claim(claim, context)
+            )
 
             # Store in database for future reference
             await self.database.store_verification(verdict)
@@ -618,7 +674,7 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
             return verdict
 
         except Exception as e:
-            # Fallback verdict if Claude fails
+            # Fallback verdict if agent fails
             return FactCheckVerdict(
                 claim_id=claim.id,
                 verdict='UNVERIFIABLE',
@@ -653,7 +709,7 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
         # Verify each claim
         verdicts = []
         for claim in claims:
-            verdict = await self.verify_claim_with_claude(claim, palestine_context)
+            verdict = await self.verify_claim_with_pydantic(claim, palestine_context)
             verdicts.append(verdict)
 
         # Calculate overall credibility
@@ -784,7 +840,7 @@ Add to `.env.example`:
 ```bash
 # Fact-checking configuration
 BING_SEARCH_API_KEY=your_bing_api_key
-CLAUDE_API_KEY=your_claude_api_key  # For Claude Code SDK
+ANTHROPIC_API_KEY=your_anthropic_api_key  # For PydanticAI with Claude models
 FACT_CHECK_ENABLED=true
 FACT_CHECK_CONFIDENCE_THRESHOLD=0.6
 FACT_CHECK_CACHE_TTL_HOURS=24

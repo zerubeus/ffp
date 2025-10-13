@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class SQLiteDatabase:
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | None = None):
         if db_path is None:
             # Use /app/data in Docker, or local directory otherwise
             if os.path.exists('/app/data'):
@@ -35,6 +35,7 @@ class SQLiteDatabase:
 
     async def _create_tables(self):
         """Create necessary tables."""
+        assert self.db is not None, 'Database connection not established'
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS posted_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +63,7 @@ class SQLiteDatabase:
 
     async def is_message_posted(self, telegram_message_id: int) -> bool:
         """Check if a message has already been posted."""
+        assert self.db is not None, 'Database connection not established'
         cursor = await self.db.execute(
             'SELECT 1 FROM posted_messages WHERE telegram_message_id = ?', (telegram_message_id,)
         )
@@ -73,10 +75,11 @@ class SQLiteDatabase:
         telegram_message_id: int,
         twitter_tweet_id: str,
         telegram_channel: str,
-        message_text: str = None,
-        media_type: str = None,
+        message_text: str | None = None,
+        media_type: str | None = None,
     ):
         """Save a successfully posted message."""
+        assert self.db is not None, 'Database connection not established'
         await self.db.execute(
             """
             INSERT INTO posted_messages 
@@ -91,6 +94,7 @@ class SQLiteDatabase:
 
     async def log_error(self, telegram_message_id: int, error_message: str, error_type: str = 'general'):
         """Log an error."""
+        assert self.db is not None, 'Database connection not established'
         await self.db.execute(
             """
             INSERT INTO error_log 
@@ -103,6 +107,7 @@ class SQLiteDatabase:
 
     async def get_recent_posts(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get recent posted messages."""
+        assert self.db is not None, 'Database connection not established'
         cursor = await self.db.execute(
             """
             SELECT telegram_message_id, twitter_tweet_id, message_text, 
@@ -120,6 +125,7 @@ class SQLiteDatabase:
 
     async def get_error_count(self, hours: int = 24) -> int:
         """Get error count in the last N hours."""
+        assert self.db is not None, 'Database connection not established'
         cutoff_time = datetime.now() - timedelta(hours=hours)
         cursor = await self.db.execute(
             """
@@ -133,6 +139,7 @@ class SQLiteDatabase:
 
     async def get_recent_errors(self, hours: int = 24, limit: int = 50) -> list[dict[str, Any]]:
         """Get recent errors from the last N hours."""
+        assert self.db is not None, 'Database connection not established'
         cutoff_time = datetime.now() - timedelta(hours=hours)
         cursor = await self.db.execute(
             """
@@ -151,6 +158,7 @@ class SQLiteDatabase:
 
     async def cleanup_old_records(self, days: int = 30):
         """Clean up old records."""
+        assert self.db is not None, 'Database connection not established'
         cutoff_time = datetime.now() - timedelta(days=days)
 
         await self.db.execute(

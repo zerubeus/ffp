@@ -1,17 +1,46 @@
 """
-Fact-checking agent for Palestine-related posts using Claude Code SDK.
+Fact-checking agent for Palestine-related posts using PydanticAI.
 """
 
 import time
 import uuid
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 
-from claude_code_sdk import ClaudeCodeOptions, query
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
 
 from .claim_extractor import ClaimExtractor
 from .database import FactCheckDatabase
 from .models import Claim, ClaimType, ConfidenceLevel, FactCheckVerdict, PalestineFactCheckContext, PostAnalysis
 from .tools import VerificationOrchestrator
+
+
+@dataclass
+class FactCheckDependencies:
+    """Dependencies for the fact-checking agent."""
+
+    claim: Claim
+    context: PalestineFactCheckContext
+    evidence: Any
+    verifier: VerificationOrchestrator
+    database: FactCheckDatabase
+
+
+class VerdictOutput(BaseModel):
+    """Structured output for fact-checking verdict."""
+
+    verdict: str = Field(
+        description='Verdict: TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING',
+        pattern='^(TRUE|FALSE|PARTIALLY_TRUE|DISPUTED|UNVERIFIABLE|MISLEADING)$',
+    )
+    confidence: str = Field(
+        description='Confidence level: HIGH/MEDIUM/LOW/INSUFFICIENT', pattern='^(HIGH|MEDIUM|LOW|INSUFFICIENT)$'
+    )
+    explanation: str = Field(description='Detailed explanation (minimum 100 words)', min_length=100)
+    evidence_summary: str = Field(description='Summary of evidence found')
+    limitations: Optional[str] = Field(default=None, description='Any limitations in verification')
+    context_needed: Optional[str] = Field(default=None, description='Additional context needed if any')
 
 
 class PalestineFactCheckAgent:
@@ -22,10 +51,16 @@ class PalestineFactCheckAgent:
         self.verifier = VerificationOrchestrator(api_key)
         self.database = FactCheckDatabase(db_path)
 
-        # Claude Code SDK options with specialized Palestine fact-checking prompt
-        self.claude_options = ClaudeCodeOptions(
-            system_prompt=self._get_fact_check_prompt(), permission_mode='acceptEdits', cwd='.'
+        # Initialize PydanticAI agent with specialized fact-checking capabilities
+        self.agent = Agent(
+            model='anthropic:claude-3-sonnet',  # Can be configured to use other models
+            deps_type=FactCheckDependencies,
+            output_type=VerdictOutput,
+            system_prompt=self._get_fact_check_prompt(),
         )
+
+        # Register dynamic instructions
+        self._setup_dynamic_instructions()
 
     def _get_fact_check_prompt(self) -> str:
         """Get the specialized fact-checking prompt for Palestine/Israel content."""
@@ -100,6 +135,42 @@ class PalestineFactCheckAgent:
 
 Remember: Your goal is to provide accurate, nuanced fact-checking that helps readers understand the factual basis of claims while acknowledging the complexity of this conflict. Prioritize truth and evidence over any particular political narrative."""
 
+    def _setup_dynamic_instructions(self):
+        """Set up dynamic instructions for context-aware fact-checking."""
+
+        @self.agent.system_prompt
+        async def add_context_info(ctx: RunContext[FactCheckDependencies]) -> str:  # pyright: ignore[reportUnusedFunction]
+            """Add context-specific instructions based on the claim type."""
+            claim = ctx.deps.claim
+            context = ctx.deps.context
+
+            instructions: list[str] = []
+
+            if claim.claim_type == ClaimType.CASUALTY:
+                instructions.append(
+                    'Pay special attention to casualty figure verification. '
+                    'Cross-reference with UN OCHA, WHO, and health ministry data. '
+                    'Note any discrepancies in methodology or reporting.'
+                )
+
+            if context.involves_settlements:
+                instructions.append(
+                    'Verify settlement-related claims against UN monitoring reports '
+                    'and international law documentation.'
+                )
+
+            if context.involves_international_law:
+                instructions.append(
+                    'Assess legal claims against Geneva Conventions, ICJ rulings, and UN Security Council resolutions.'
+                )
+
+            if context.involves_historical_events:
+                instructions.append(
+                    'Cross-reference historical claims with multiple academic sources and official archives.'
+                )
+
+            return '\n'.join(instructions) if instructions else ''
+
     async def setup(self):
         """Initialize the fact-checking agent."""
         await self.database.setup_database()
@@ -130,9 +201,9 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
         palestine_context = self.claim_extractor.get_palestine_context(claims)
 
         # Verify each claim
-        verdicts = []
+        verdicts: list[FactCheckVerdict] = []
         for claim in claims:
-            verdict = await self._verify_claim_with_claude(claim, palestine_context)
+            verdict = await self._verify_claim_with_pydantic(claim, palestine_context)
             verdicts.append(verdict)
 
         # Calculate overall credibility and determine flags
@@ -166,8 +237,8 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
 
         return analysis
 
-    async def _verify_claim_with_claude(self, claim: Claim, context: PalestineFactCheckContext) -> FactCheckVerdict:
-        """Verify a single claim using Claude and external sources."""
+    async def _verify_claim_with_pydantic(self, claim: Claim, context: PalestineFactCheckContext) -> FactCheckVerdict:
+        """Verify a single claim using PydanticAI and external sources."""
 
         # Check database cache first
         cached_verdict = await self.database.lookup_claim(claim.text)
@@ -177,15 +248,20 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
         # Gather evidence from external sources
         evidence = await self.verifier.verify_claim(claim.text, claim.claim_type.value)
 
-        # Prepare context for Claude
-        context_info = self._format_context_for_claude(claim, context, evidence)
+        # Prepare context for the agent
+        context_info = self._format_context_for_agent(claim, context, evidence)
 
-        # Query Claude for fact-checking analysis
+        # Create dependencies for the agent
+        deps = FactCheckDependencies(
+            claim=claim, context=context, evidence=evidence, verifier=self.verifier, database=self.database
+        )
+
+        # Prepare the prompt for the agent
         prompt = f"""Fact-check this claim: "{claim.text}"
 
 Context: {context_info}
 
-Evidence found: {self._format_evidence_for_claude(evidence)}
+Evidence found: {self._format_evidence_for_agent(evidence)}
 
 Please provide a structured fact-check verdict with:
 1. Verdict (TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING)
@@ -193,17 +269,24 @@ Please provide a structured fact-check verdict with:
 3. Detailed explanation (minimum 100 words)
 4. Evidence summary
 5. Any limitations in verification
-6. Additional context needed (if any)
-
-Format your response as JSON with these exact keys: verdict, confidence, explanation, evidence_summary, limitations, context_needed"""
+6. Additional context needed (if any)"""
 
         try:
-            response_text = ''
-            async for message in query(prompt=prompt, options=self.claude_options):
-                response_text += str(message)
+            # Run the PydanticAI agent
+            result = await self.agent.run(prompt, deps=deps)
 
-            # Parse Claude's response and create verdict
-            verdict = self._parse_claude_response(response_text, claim, evidence)
+            # Convert the structured output to FactCheckVerdict
+            verdict = FactCheckVerdict(
+                claim_id=claim.id,
+                verdict=result.output.verdict,
+                confidence=ConfidenceLevel(result.output.confidence.lower()),
+                explanation=result.output.explanation,
+                evidence_summary=result.output.evidence_summary,
+                sources_consulted=[s.url for s in evidence.sources],
+                limitations=result.output.limitations,
+                context_needed=result.output.context_needed,
+                sensitive_topic=self._is_sensitive_claim(claim, context),
+            )
 
             # Store in database for future reference
             await self.database.store_verification(verdict)
@@ -211,7 +294,7 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
             return verdict
 
         except Exception as e:
-            # Fallback verdict if Claude fails
+            # Fallback verdict if agent fails
             return FactCheckVerdict(
                 claim_id=claim.id,
                 verdict='UNVERIFIABLE',
@@ -219,12 +302,14 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
                 explanation=f'Unable to verify claim due to technical error: {str(e)}',
                 evidence_summary='No evidence could be gathered',
                 sources_consulted=[],
+                limitations='Technical error prevented full verification',
+                context_needed=None,
                 sensitive_topic=self._is_sensitive_claim(claim, context),
             )
 
-    def _format_context_for_claude(self, claim: Claim, context: PalestineFactCheckContext, evidence) -> str:
-        """Format context information for Claude analysis."""
-        context_parts = []
+    def _format_context_for_agent(self, claim: Claim, context: PalestineFactCheckContext, evidence: Any) -> str:
+        """Format context information for agent analysis."""
+        context_parts: list[str] = []
 
         if claim.location_context:
             context_parts.append(f'Location: {claim.location_context}')
@@ -246,12 +331,12 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
 
         return '; '.join(context_parts) if context_parts else 'General Palestine/Israel conflict context'
 
-    def _format_evidence_for_claude(self, evidence) -> str:
-        """Format evidence sources for Claude analysis."""
+    def _format_evidence_for_agent(self, evidence: Any) -> str:
+        """Format evidence sources for agent analysis."""
         if not evidence.sources:
             return 'No external sources found'
 
-        source_summaries = []
+        source_summaries: list[str] = []
         for source in evidence.sources[:10]:  # Limit to top 10 sources
             summary = (
                 f'- {source.domain} (credibility: {source.credibility_score:.2f}): {source.relevant_excerpt[:200]}'
@@ -259,60 +344,6 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
             source_summaries.append(summary)
 
         return '\n'.join(source_summaries)
-
-    def _parse_claude_response(self, response: str, claim: Claim, evidence) -> FactCheckVerdict:
-        """Parse Claude's response into a structured verdict."""
-        import json
-        import re
-
-        try:
-            # Try to extract JSON from response
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-
-                return FactCheckVerdict(
-                    claim_id=claim.id,
-                    verdict=data.get('verdict', 'UNVERIFIABLE'),
-                    confidence=ConfidenceLevel(data.get('confidence', 'insufficient').lower()),
-                    explanation=data.get('explanation', 'No explanation provided'),
-                    evidence_summary=data.get('evidence_summary', 'No evidence summary'),
-                    sources_consulted=[s.url for s in evidence.sources],
-                    limitations=data.get('limitations'),
-                    context_needed=data.get('context_needed'),
-                    sensitive_topic=self._is_sensitive_claim(claim, None),
-                )
-        except Exception:
-            pass
-
-        # Fallback parsing if JSON fails
-        lines = response.split('\n')
-        verdict = 'UNVERIFIABLE'
-        confidence = ConfidenceLevel.INSUFFICIENT
-        explanation = response[:500]  # Take first 500 chars as explanation
-
-        # Try to extract verdict from text
-        for line in lines:
-            if 'verdict:' in line.lower():
-                verdict_match = re.search(
-                    r'(TRUE|FALSE|PARTIALLY_TRUE|DISPUTED|UNVERIFIABLE|MISLEADING)', line, re.IGNORECASE
-                )
-                if verdict_match:
-                    verdict = verdict_match.group().upper()
-            elif 'confidence:' in line.lower():
-                conf_match = re.search(r'(HIGH|MEDIUM|LOW|INSUFFICIENT)', line, re.IGNORECASE)
-                if conf_match:
-                    confidence = ConfidenceLevel(conf_match.group().lower())
-
-        return FactCheckVerdict(
-            claim_id=claim.id,
-            verdict=verdict,
-            confidence=confidence,
-            explanation=explanation,
-            evidence_summary=f'Found {len(evidence.sources)} sources',
-            sources_consulted=[s.url for s in evidence.sources],
-            sensitive_topic=self._is_sensitive_claim(claim, None),
-        )
 
     def _calculate_overall_credibility(self, verdicts: list[FactCheckVerdict]) -> ConfidenceLevel:
         """Calculate overall credibility based on individual verdicts."""
@@ -335,7 +366,7 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
         self, claims: list[Claim], verdicts: list[FactCheckVerdict], context: PalestineFactCheckContext
     ) -> list[str]:
         """Generate warning flags for the post."""
-        flags = []
+        flags: list[str] = []
 
         if any(v.verdict == 'FALSE' for v in verdicts):
             flags.append('Contains false information')
@@ -396,7 +427,7 @@ Format your response as JSON with these exact keys: verdict, confidence, explana
 
         return any(keyword in claim.text.lower() for keyword in sensitive_keywords)
 
-    async def get_analysis_summary(self, days: int = 7) -> dict:
+    async def get_analysis_summary(self, days: int = 7) -> dict[str, Any]:
         """Get a summary of recent fact-checking activity."""
         history = await self.database.get_analysis_history(days)
         cache_stats = await self.database.get_cache_statistics()

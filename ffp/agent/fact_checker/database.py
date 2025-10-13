@@ -187,7 +187,7 @@ class FactCheckDatabase:
                     await db.commit()
 
                     # Parse sources
-                    sources = json.loads(row[5]) if row[5] else []
+                    sources: list[str] = json.loads(row[5]) if row[5] else []
 
                     return FactCheckVerdict(
                         claim_id=claim_text,
@@ -196,6 +196,8 @@ class FactCheckDatabase:
                         explanation=row[3] or '',
                         evidence_summary=row[4] or '',
                         sources_consulted=sources,
+                        limitations=None,
+                        context_needed=None,
                         verification_timestamp=datetime.fromisoformat(row[7]),
                         sensitive_topic=bool(row[6]),
                     )
@@ -256,6 +258,9 @@ class FactCheckDatabase:
             )
 
             post_analysis_id = cursor.lastrowid
+
+            if post_analysis_id is None:
+                raise ValueError('Failed to store post analysis')
 
             # Store claims
             for claim in analysis.claims:
@@ -352,7 +357,8 @@ class FactCheckDatabase:
         async with aiosqlite.connect(self.db_path) as db:
             # Total cached claims
             async with db.execute('SELECT COUNT(*) FROM verified_facts') as cursor:
-                total_cached = (await cursor.fetchone())[0]
+                result = await cursor.fetchone()
+                total_cached: int = result[0] if result else 0
 
             # Recent access patterns
             async with db.execute("""
@@ -361,8 +367,8 @@ class FactCheckDatabase:
                 WHERE last_accessed > datetime('now', '-7 days')
             """) as cursor:
                 row = await cursor.fetchone()
-                avg_access = row[0] or 0
-                recent_accessed = row[1] or 0
+                avg_access: float = float(row[0]) if row and row[0] is not None else 0.0
+                recent_accessed: int = int(row[1]) if row and row[1] is not None else 0
 
             # Confidence distribution
             async with db.execute("""
