@@ -5,7 +5,7 @@ Fact-checking agent for Palestine-related posts using PydanticAI.
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
@@ -39,14 +39,14 @@ class VerdictOutput(BaseModel):
     )
     explanation: str = Field(description='Detailed explanation (minimum 100 words)', min_length=100)
     evidence_summary: str = Field(description='Summary of evidence found')
-    limitations: Optional[str] = Field(default=None, description='Any limitations in verification')
-    context_needed: Optional[str] = Field(default=None, description='Additional context needed if any')
+    limitations: str | None = Field(default=None, description='Any limitations in verification')
+    context_needed: str | None = Field(default=None, description='Additional context needed if any')
 
 
 class PalestineFactCheckAgent:
     """Main fact-checking agent for Palestine/Israel conflict-related posts."""
 
-    def __init__(self, api_key: Optional[str] = None, db_path: str = 'fact_check.db'):
+    def __init__(self, api_key: str | None = None, db_path: str = 'fact_check.db'):
         self.claim_extractor = ClaimExtractor()
         self.verifier = VerificationOrchestrator(api_key)
         self.database = FactCheckDatabase(db_path)
@@ -175,7 +175,7 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
         """Initialize the fact-checking agent."""
         await self.database.setup_database()
 
-    async def analyze_post(self, post_text: str, post_url: Optional[str] = None) -> PostAnalysis:
+    async def analyze_post(self, post_text: str, post_url: str | None = None) -> PostAnalysis:
         """Analyze a complete social media post for factual claims."""
         start_time = time.time()
 
@@ -408,7 +408,7 @@ Please provide a structured fact-check verdict with:
         else:
             return 'normal'
 
-    def _is_sensitive_claim(self, claim: Claim, context: Optional[PalestineFactCheckContext]) -> bool:
+    def _is_sensitive_claim(self, claim: Claim, context: PalestineFactCheckContext | None) -> bool:
         """Determine if a claim involves sensitive topics."""
         sensitive_keywords = [
             'killed',

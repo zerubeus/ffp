@@ -4,7 +4,7 @@ Verification tools for fact-checking claims using multiple sources.
 
 import asyncio
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import aiohttp
 
@@ -14,7 +14,7 @@ from .models import ConfidenceLevel, Evidence, EvidenceSource
 class WebSearchTool:
     """Tool for searching the web to find relevant information."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         self.api_key = api_key
         self.base_url = 'https://api.bing.microsoft.com/v7.0/search'
 
@@ -173,7 +173,7 @@ class FactCheckingSitesTool:
 
         return sources
 
-    def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
+    def _parse_date(self, date_str: str | None) -> datetime | None:
         """Parse date string to datetime object."""
         if not date_str:
             return None
@@ -313,7 +313,7 @@ class EvidenceAnalyzer:
 class VerificationOrchestrator:
     """Orchestrates the verification process using multiple tools."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         self.web_search = WebSearchTool(api_key)
         self.fact_checker = FactCheckingSitesTool(self.web_search)
         self.analyzer = EvidenceAnalyzer()

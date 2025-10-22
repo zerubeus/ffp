@@ -4,7 +4,6 @@ Data models for the fact-checking agent.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -41,10 +40,10 @@ class Claim(BaseModel):
     claim_type: ClaimType
     confidence: float = Field(..., ge=0.0, le=1.0, description='Extraction confidence')
     context: str = Field(..., description='Surrounding context from the post')
-    extracted_entities: List[str] = Field(default_factory=list, description='Named entities found')
-    keywords: List[str] = Field(default_factory=list, description='Key terms')
-    location_context: Optional[str] = Field(None, description='Geographic context if relevant')
-    temporal_context: Optional[str] = Field(None, description='Time context if relevant')
+    extracted_entities: list[str] = Field(default_factory=list, description='Named entities found')
+    keywords: list[str] = Field(default_factory=list, description='Key terms')
+    location_context: str | None = Field(None, description='Geographic context if relevant')
+    temporal_context: str | None = Field(None, description='Time context if relevant')
 
 
 class EvidenceSource(BaseModel):
@@ -54,19 +53,19 @@ class EvidenceSource(BaseModel):
     title: str
     domain: str
     credibility_score: float = Field(..., ge=0.0, le=1.0)
-    bias_rating: Optional[str] = None  # left, center, right, unknown
-    publication_date: Optional[datetime] = None
+    bias_rating: str | None = None  # left, center, right, unknown
+    publication_date: datetime | None = None
     relevant_excerpt: str
     source_type: str  # "fact_checker", "news", "academic", "government", "ngo", "un"
-    author: Optional[str] = None
-    methodology: Optional[str] = None  # How the source gathered information
+    author: str | None = None
+    methodology: str | None = None  # How the source gathered information
 
 
 class Evidence(BaseModel):
     """Evidence collected for a specific claim."""
 
     claim_id: str
-    sources: List[EvidenceSource]
+    sources: list[EvidenceSource]
     supporting_count: int = 0
     contradicting_count: int = 0
     neutral_count: int = 0
@@ -83,9 +82,9 @@ class FactCheckVerdict(BaseModel):
     confidence: ConfidenceLevel
     explanation: str = Field(..., min_length=50, description='Detailed explanation of the verdict')
     evidence_summary: str = Field(..., description='Summary of evidence found')
-    sources_consulted: List[str] = Field(..., description='URLs of sources checked')
-    limitations: Optional[str] = Field(None, description='Limitations in verification')
-    context_needed: Optional[str] = Field(None, description='Additional context needed')
+    sources_consulted: list[str] = Field(..., description='URLs of sources checked')
+    limitations: str | None = Field(None, description='Limitations in verification')
+    context_needed: str | None = Field(None, description='Additional context needed')
     verification_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sensitive_topic: bool = Field(default=False, description='Whether claim involves sensitive topic')
 
@@ -94,16 +93,16 @@ class PostAnalysis(BaseModel):
     """Complete analysis of a social media post."""
 
     post_id: str
-    post_url: Optional[str] = None
+    post_url: str | None = None
     post_text: str
-    claims: List[Claim]
-    verdicts: List[FactCheckVerdict]
+    claims: list[Claim]
+    verdicts: list[FactCheckVerdict]
     overall_credibility: ConfidenceLevel
     analysis_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     potential_misinformation: bool = Field(default=False)
     requires_human_review: bool = Field(default=False)
     topic_sensitivity: str = Field(default='normal')  # "normal", "sensitive", "highly_sensitive"
-    warning_flags: List[str] = Field(default_factory=list)
+    warning_flags: list[str] = Field(default_factory=list)
 
 
 class PalestineFactCheckContext(BaseModel):
@@ -115,6 +114,6 @@ class PalestineFactCheckContext(BaseModel):
     involves_historical_events: bool = False
     involves_territory_claims: bool = False
     involves_human_rights: bool = False
-    time_period: Optional[str] = None  # "current", "historical", "ongoing"
-    geographical_scope: Optional[str] = None  # "gaza", "west_bank", "jerusalem", "israel_proper"
-    source_perspective: Optional[str] = None  # "israeli", "palestinian", "international", "neutral"
+    time_period: str | None = None  # "current", "historical", "ongoing"
+    geographical_scope: str | None = None  # "gaza", "west_bank", "jerusalem", "israel_proper"
+    source_perspective: str | None = None  # "israeli", "palestinian", "international", "neutral"

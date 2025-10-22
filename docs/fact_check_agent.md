@@ -232,7 +232,6 @@ The agent uses PydanticAI for structured AI interactions with specialized fact-c
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from dataclasses import dataclass
-from typing import List, Optional
 
 @dataclass
 class FactCheckDependencies:
@@ -249,13 +248,13 @@ class VerdictOutput(BaseModel):
     confidence: str = Field(description='Confidence level: HIGH/MEDIUM/LOW/INSUFFICIENT')
     explanation: str = Field(description='Detailed explanation', min_length=100)
     evidence_summary: str = Field(description='Summary of evidence found')
-    limitations: Optional[str] = Field(default=None)
-    context_needed: Optional[str] = Field(default=None)
+    limitations: str | None = Field(default=None)
+    context_needed: str | None = Field(default=None)
 
 class PalestineFactCheckAgent:
     """Main fact-checking agent orchestrating all verification processes."""
 
-    def __init__(self, api_key: Optional[str] = None, db_path: str = 'fact_check.db'):
+    def __init__(self, api_key: str | None = None, db_path: str = 'fact_check.db'):
         self.agent = Agent(
             'anthropic:claude-3-sonnet',
             deps_type=FactCheckDependencies,
@@ -349,7 +348,6 @@ The claim extraction system uses advanced NLP techniques to identify factual ass
 ```python
 import spacy
 from transformers import pipeline
-from typing import List, Tuple
 
 class ClaimExtractor:
     """Extracts factual claims from social media posts using NLP."""
@@ -362,7 +360,7 @@ class ClaimExtractor:
         )
         self.ner_pipeline = pipeline("ner", aggregation_strategy="simple")
 
-    async def extract_claims(self, text: str) -> List[Claim]:
+    async def extract_claims(self, text: str) -> list[Claim]:
         """Extract factual claims from input text."""
         doc = self.nlp(text)
         sentences = [sent.text.strip() for sent in doc.sents]
@@ -411,7 +409,7 @@ class ClaimExtractor:
 
 ```python
 import aiohttp
-from typing import List, Dict, Any
+from typing import Any
 
 class WebSearchTool:
     """Tool for searching the web to find relevant information."""
@@ -420,7 +418,7 @@ class WebSearchTool:
         self.api_key = api_key
         self.base_url = "https://api.bing.microsoft.com/v7.0/search"
 
-    async def search(self, query: str, num_results: int = 10) -> List[Dict[str, Any]]:
+    async def search(self, query: str, num_results: int = 10) -> list[dict[str, Any]]:
         """Search the web for information about a claim."""
         headers = {"Ocp-Apim-Subscription-Key": self.api_key}
         params = {
@@ -486,7 +484,6 @@ class FactCheckingSitesTool:
 ```python
 import sqlite3
 import aiosqlite
-from typing import Optional, List
 
 class KnowledgeBase:
     """Local knowledge base for storing verified facts and claims."""
@@ -560,13 +557,12 @@ class KnowledgeBase:
 
 ```python
 from pydantic_ai import Agent, RunContext
-from typing import List, Optional
 import uuid
 
 class PalestineFactCheckAgent:
     """Main fact-checking agent that orchestrates the entire verification process."""
 
-    def __init__(self, api_key: Optional[str] = None, db_path: str = 'fact_check.db'):
+    def __init__(self, api_key: str | None = None, db_path: str = 'fact_check.db'):
         self.claim_extractor = ClaimExtractor()
         self.verifier = VerificationOrchestrator(api_key)
         self.database = FactCheckDatabase(db_path)
