@@ -9,7 +9,7 @@ from typing import Any
 
 import aiosqlite
 
-from .models import Claim, ConfidenceLevel, FactCheckVerdict, PostAnalysis
+from ffp.agent.fact_checker.models import Claim, ConfidenceLevel, FactCheckVerdict, PostAnalysis
 
 
 class FactCheckDatabase:

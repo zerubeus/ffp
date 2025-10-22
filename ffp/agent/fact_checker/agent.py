@@ -10,10 +10,10 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
-from .claim_extractor import ClaimExtractor
-from .database import FactCheckDatabase
-from .models import Claim, ClaimType, ConfidenceLevel, FactCheckVerdict, PalestineFactCheckContext, PostAnalysis
-from .tools import VerificationOrchestrator
+from ffp.agent.fact_checker.claim_extractor import ClaimExtractor
+from ffp.agent.fact_checker.database import FactCheckDatabase
+from ffp.agent.fact_checker.models import Claim, ClaimType, ConfidenceLevel, FactCheckVerdict, PalestineFactCheckContext, PostAnalysis
+from ffp.agent.fact_checker.tools import VerificationOrchestrator
 
 
 @dataclass

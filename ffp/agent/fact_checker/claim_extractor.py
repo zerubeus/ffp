@@ -5,7 +5,7 @@ Claim extraction module for identifying factual claims in social media posts.
 import re
 import uuid
 
-from .models import Claim, ClaimType, PalestineFactCheckContext
+from ffp.agent.fact_checker.models import Claim, ClaimType, PalestineFactCheckContext
 
 
 class ClaimExtractor:

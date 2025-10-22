@@ -8,7 +8,7 @@ from typing import Any
 
 import aiohttp
 
-from .models import ConfidenceLevel, Evidence, EvidenceSource
+from ffp.agent.fact_checker.models import ConfidenceLevel, Evidence, EvidenceSource
 
 
 class WebSearchTool:
