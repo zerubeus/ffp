@@ -2,6 +2,8 @@
 Fact-checking agent for Palestine-related posts using PydanticAI.
 """
 
+import asyncio
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -11,9 +13,17 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
 from ffp.agent.fact_checker.claim_extractor import ClaimExtractor
+from ffp.agent.fact_checker.config import config
 from ffp.agent.fact_checker.database import FactCheckDatabase
 from ffp.agent.fact_checker.models import Claim, ClaimType, ConfidenceLevel, FactCheckVerdict, PalestineFactCheckContext, PostAnalysis
 from ffp.agent.fact_checker.tools import VerificationOrchestrator
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 @dataclass
@@ -47,13 +57,14 @@ class PalestineFactCheckAgent:
     """Main fact-checking agent for Palestine/Israel conflict-related posts."""
 
     def __init__(self, api_key: str | None = None, db_path: str = 'fact_check.db'):
+        logger.info('Initializing PalestineFactCheckAgent')
         self.claim_extractor = ClaimExtractor()
         self.verifier = VerificationOrchestrator(api_key)
         self.database = FactCheckDatabase(db_path)
 
         # Initialize PydanticAI agent with specialized fact-checking capabilities
         self.agent = Agent(
-            model='anthropic:claude-3-sonnet',  # Can be configured to use other models
+            model=config.default_model,
             deps_type=FactCheckDependencies,
             output_type=VerdictOutput,
             system_prompt=self._get_fact_check_prompt(),
@@ -61,6 +72,7 @@ class PalestineFactCheckAgent:
 
         # Register dynamic instructions
         self._setup_dynamic_instructions()
+        logger.info('PalestineFactCheckAgent initialized successfully')
 
     def _get_fact_check_prompt(self) -> str:
         """Get the specialized fact-checking prompt for Palestine/Israel content."""
@@ -181,12 +193,15 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
 
         # Generate unique post ID
         post_id = str(uuid.uuid4())
+        logger.info(f'Starting analysis for post {post_id}')
 
         # Extract claims from the post
         claims = await self.claim_extractor.extract_claims(post_text)
+        logger.info(f'Extracted {len(claims)} claims from post {post_id}')
 
         if not claims:
             # No factual claims found
+            logger.info(f'No claims found in post {post_id}')
             return PostAnalysis(
                 post_id=post_id,
                 post_url=post_url,
@@ -199,12 +214,16 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
 
         # Get Palestine-specific context
         palestine_context = self.claim_extractor.get_palestine_context(claims)
+        logger.debug(f'Palestine context for post {post_id}: {palestine_context}')
 
-        # Verify each claim
-        verdicts: list[FactCheckVerdict] = []
-        for claim in claims:
-            verdict = await self._verify_claim_with_pydantic(claim, palestine_context)
-            verdicts.append(verdict)
+        # Verify each claim in parallel using asyncio.gather
+        logger.info(f'Verifying {len(claims)} claims in parallel for post {post_id}')
+        verification_tasks = [
+            self._verify_claim_with_pydantic(claim, palestine_context)
+            for claim in claims
+        ]
+        verdicts = await asyncio.gather(*verification_tasks)
+        logger.info(f'Completed verification of {len(verdicts)} claims for post {post_id}')
 
         # Calculate overall credibility and determine flags
         overall_credibility = self._calculate_overall_credibility(verdicts)
@@ -221,7 +240,7 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
             post_url=post_url,
             post_text=post_text,
             claims=claims,
-            verdicts=verdicts,
+            verdicts=list(verdicts),
             overall_credibility=overall_credibility,
             potential_misinformation=any(v.verdict in ['FALSE', 'MISLEADING'] for v in verdicts),
             requires_human_review=requires_review,
@@ -233,20 +252,25 @@ Remember: Your goal is to provide accurate, nuanced fact-checking that helps rea
         await self.database.store_post_analysis(analysis)
 
         processing_time = time.time() - start_time
-        print(f'Fact-check completed in {processing_time:.2f} seconds')
+        logger.info(f'Fact-check completed for post {post_id} in {processing_time:.2f} seconds')
 
         return analysis
 
     async def _verify_claim_with_pydantic(self, claim: Claim, context: PalestineFactCheckContext) -> FactCheckVerdict:
         """Verify a single claim using PydanticAI and external sources."""
+        logger.debug(f'Verifying claim {claim.id}: {claim.text[:50]}...')
 
         # Check database cache first
         cached_verdict = await self.database.lookup_claim(claim.text)
         if cached_verdict and cached_verdict.confidence in [ConfidenceLevel.HIGH, ConfidenceLevel.MEDIUM]:
+            logger.info(f'Cache hit for claim {claim.id}')
             return cached_verdict
+
+        logger.debug(f'Cache miss for claim {claim.id}, gathering evidence')
 
         # Gather evidence from external sources
         evidence = await self.verifier.verify_claim(claim.text, claim.claim_type.value)
+        logger.info(f'Gathered {len(evidence.sources)} sources for claim {claim.id}')
 
         # Prepare context for the agent
         context_info = self._format_context_for_agent(claim, context, evidence)
@@ -266,13 +290,14 @@ Evidence found: {self._format_evidence_for_agent(evidence)}
 Please provide a structured fact-check verdict with:
 1. Verdict (TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING)
 2. Confidence level (HIGH/MEDIUM/LOW/INSUFFICIENT)
-3. Detailed explanation (minimum 100 words)
+3. Detailed explanation (minimum {config.min_explanation_length} words)
 4. Evidence summary
 5. Any limitations in verification
 6. Additional context needed (if any)"""
 
         try:
             # Run the PydanticAI agent
+            logger.debug(f'Running PydanticAI agent for claim {claim.id}')
             result = await self.agent.run(prompt, deps=deps)
 
             # Convert the structured output to FactCheckVerdict
@@ -288,6 +313,8 @@ Please provide a structured fact-check verdict with:
                 sensitive_topic=self._is_sensitive_claim(claim, context),
             )
 
+            logger.info(f'Verdict for claim {claim.id}: {verdict.verdict} (confidence: {verdict.confidence.value})')
+
             # Store in database for future reference
             await self.database.store_verification(verdict)
 
@@ -295,6 +322,7 @@ Please provide a structured fact-check verdict with:
 
         except Exception as e:
             # Fallback verdict if agent fails
+            logger.error(f'Error verifying claim {claim.id}: {str(e)}', exc_info=True)
             return FactCheckVerdict(
                 claim_id=claim.id,
                 verdict='UNVERIFIABLE',
@@ -337,7 +365,7 @@ Please provide a structured fact-check verdict with:
             return 'No external sources found'
 
         source_summaries: list[str] = []
-        for source in evidence.sources[:10]:  # Limit to top 10 sources
+        for source in evidence.sources[:config.max_sources_per_evidence]:
             summary = (
                 f'- {source.domain} (credibility: {source.credibility_score:.2f}): {source.relevant_excerpt[:200]}'
             )
@@ -355,9 +383,9 @@ Please provide a structured fact-check verdict with:
 
         total_verdicts = len(verdicts)
 
-        if false_count / total_verdicts > 0.5:
+        if false_count / total_verdicts > config.false_verdict_threshold:
             return ConfidenceLevel.LOW
-        elif (false_count + disputed_count) / total_verdicts > 0.3:
+        elif (false_count + disputed_count) / total_verdicts > config.disputed_verdict_threshold:
             return ConfidenceLevel.MEDIUM
         else:
             return ConfidenceLevel.HIGH
@@ -389,12 +417,16 @@ Please provide a structured fact-check verdict with:
         """Determine if human review is required."""
         # Require review for sensitive or complex cases
         if context.involves_human_rights or context.involves_international_law:
+            logger.debug('Human review required due to sensitive content')
             return True
 
         if any(v.verdict in ['DISPUTED', 'MISLEADING'] for v in verdicts):
+            logger.debug('Human review required due to disputed/misleading verdicts')
             return True
 
-        if len([v for v in verdicts if v.confidence == ConfidenceLevel.INSUFFICIENT]) > 2:
+        insufficient_count = len([v for v in verdicts if v.confidence == ConfidenceLevel.INSUFFICIENT])
+        if insufficient_count > config.min_insufficient_confidence_for_review:
+            logger.debug(f'Human review required due to {insufficient_count} insufficient confidence verdicts')
             return True
 
         return False
@@ -427,8 +459,12 @@ Please provide a structured fact-check verdict with:
 
         return any(keyword in claim.text.lower() for keyword in sensitive_keywords)
 
-    async def get_analysis_summary(self, days: int = 7) -> dict[str, Any]:
+    async def get_analysis_summary(self, days: int | None = None) -> dict[str, Any]:
         """Get a summary of recent fact-checking activity."""
+        if days is None:
+            days = config.analysis_history_days
+
+        logger.info(f'Generating analysis summary for the past {days} days')
         history = await self.database.get_analysis_history(days)
         cache_stats = await self.database.get_cache_statistics()
         trending = await self.database.get_trending_claims(days)
@@ -439,5 +475,5 @@ Please provide a structured fact-check verdict with:
             'potential_misinformation': len([h for h in history if h['potential_misinformation']]),
             'sensitive_topics': len([h for h in history if h['topic_sensitivity'] != 'normal']),
             'cache_statistics': cache_stats,
-            'trending_claims': trending[:5],  # Top 5 trending claims
+            'trending_claims': trending[:config.trending_claims_limit],
         }

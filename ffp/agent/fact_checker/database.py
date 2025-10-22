@@ -4,12 +4,17 @@ Database integration for fact-checking agent using SQLite.
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
 import aiosqlite
 
+from ffp.agent.fact_checker.config import config
 from ffp.agent.fact_checker.models import Claim, ConfidenceLevel, FactCheckVerdict, PostAnalysis
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class FactCheckDatabase:
@@ -17,9 +22,11 @@ class FactCheckDatabase:
 
     def __init__(self, db_path: str = 'fact_check.db'):
         self.db_path = db_path
+        logger.info(f'Initializing FactCheckDatabase with path: {db_path}')
 
     async def setup_database(self):
         """Initialize the fact-checking database schema."""
+        logger.info('Setting up database schema')
         async with aiosqlite.connect(self.db_path) as db:
             await db.executescript("""
                 -- Verified facts cache
@@ -159,54 +166,60 @@ class FactCheckDatabase:
         return hashlib.sha256(normalized.encode()).hexdigest()
 
     async def lookup_claim(self, claim_text: str) -> FactCheckVerdict | None:
-        """Look up a previously verified claim."""
+        """Look up a previously verified claim with atomic access tracking."""
         claim_hash = self._hash_claim(claim_text)
+        logger.debug(f'Looking up claim with hash: {claim_hash[:16]}...')
 
         async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                """
-                SELECT original_claim, verdict, confidence, explanation,
-                       evidence_summary, sources_json, sensitive_topic, created_at
-                FROM verified_facts
-                WHERE claim_hash = ? AND created_at > datetime('now', '-30 days')
-                ORDER BY created_at DESC LIMIT 1
-            """,
-                (claim_hash,),
-            ) as cursor:
-                row = await cursor.fetchone()
-                if row:
-                    # Update access tracking
-                    await db.execute(
-                        """
-                        UPDATE verified_facts
-                        SET access_count = access_count + 1, last_accessed = CURRENT_TIMESTAMP
-                        WHERE claim_hash = ?
-                    """,
-                        (claim_hash,),
-                    )
-                    await db.commit()
+            # Use transaction to ensure atomic read + update
+            async with db.execute('BEGIN IMMEDIATE'):
+                async with db.execute(
+                    """
+                    SELECT original_claim, verdict, confidence, explanation,
+                           evidence_summary, sources_json, sensitive_topic, created_at
+                    FROM verified_facts
+                    WHERE claim_hash = ? AND created_at > datetime('now', ? || ' days')
+                    ORDER BY created_at DESC LIMIT 1
+                """,
+                    (claim_hash, f'-{config.cache_ttl_days}'),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        # Update access tracking atomically within the same transaction
+                        await db.execute(
+                            """
+                            UPDATE verified_facts
+                            SET access_count = access_count + 1, last_accessed = CURRENT_TIMESTAMP
+                            WHERE claim_hash = ?
+                        """,
+                            (claim_hash,),
+                        )
+                        await db.commit()
+                        logger.debug(f'Cache hit for claim hash: {claim_hash[:16]}...')
 
-                    # Parse sources
-                    sources: list[str] = json.loads(row[5]) if row[5] else []
+                        # Parse sources
+                        sources: list[str] = json.loads(row[5]) if row[5] else []
 
-                    return FactCheckVerdict(
-                        claim_id=claim_text,
-                        verdict=row[1],
-                        confidence=ConfidenceLevel(row[2]),
-                        explanation=row[3] or '',
-                        evidence_summary=row[4] or '',
-                        sources_consulted=sources,
-                        limitations=None,
-                        context_needed=None,
-                        verification_timestamp=datetime.fromisoformat(row[7]),
-                        sensitive_topic=bool(row[6]),
-                    )
+                        return FactCheckVerdict(
+                            claim_id=claim_text,
+                            verdict=row[1],
+                            confidence=ConfidenceLevel(row[2]),
+                            explanation=row[3] or '',
+                            evidence_summary=row[4] or '',
+                            sources_consulted=sources,
+                            limitations=None,
+                            context_needed=None,
+                            verification_timestamp=datetime.fromisoformat(row[7]),
+                            sensitive_topic=bool(row[6]),
+                        )
+        logger.debug(f'Cache miss for claim hash: {claim_hash[:16]}...')
         return None
 
     async def store_verification(self, verdict: FactCheckVerdict):
         """Store a completed fact-check for future reference."""
         claim_hash = self._hash_claim(verdict.claim_id)
         sources_json = json.dumps(verdict.sources_consulted)
+        logger.debug(f'Storing verification for claim hash: {claim_hash[:16]}...')
 
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
@@ -228,10 +241,12 @@ class FactCheckDatabase:
                 ),
             )
             await db.commit()
+            logger.info(f'Stored verification: {verdict.verdict} with confidence {verdict.confidence.value}')
 
     async def store_post_analysis(self, analysis: PostAnalysis) -> int:
         """Store a complete post analysis."""
         warning_flags_json = json.dumps(analysis.warning_flags)
+        logger.info(f'Storing post analysis for post {analysis.post_id} with {len(analysis.claims)} claims')
 
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
@@ -327,6 +342,7 @@ class FactCheckDatabase:
 
     async def get_analysis_history(self, days: int = 7) -> list[dict[str, Any]]:
         """Get recent analysis history."""
+        logger.debug(f'Retrieving analysis history for the past {days} days')
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
                 """
@@ -355,6 +371,7 @@ class FactCheckDatabase:
 
     async def get_cache_statistics(self) -> dict[str, Any]:
         """Get cache hit statistics."""
+        logger.debug('Retrieving cache statistics')
         async with aiosqlite.connect(self.db_path) as db:
             # Total cached claims
             async with db.execute('SELECT COUNT(*) FROM verified_facts') as cursor:
@@ -362,11 +379,14 @@ class FactCheckDatabase:
                 total_cached: int = result[0] if result else 0
 
             # Recent access patterns
-            async with db.execute("""
+            async with db.execute(
+                """
                 SELECT AVG(access_count), COUNT(*)
                 FROM verified_facts
-                WHERE last_accessed > datetime('now', '-7 days')
-            """) as cursor:
+                WHERE last_accessed > datetime('now', ? || ' days')
+            """,
+                (f'-{config.recent_access_days}',),
+            ) as cursor:
                 row = await cursor.fetchone()
                 avg_access: float = float(row[0]) if row and row[0] is not None else 0.0
                 recent_accessed: int = int(row[1]) if row and row[1] is not None else 0
@@ -379,6 +399,7 @@ class FactCheckDatabase:
             """) as cursor:
                 confidence_dist = {row[0]: row[1] for row in await cursor.fetchall()}
 
+            logger.debug(f'Cache statistics: {total_cached} total claims, {recent_accessed} recently accessed')
             return {
                 'total_cached_claims': total_cached,
                 'average_access_count': avg_access,
@@ -404,34 +425,43 @@ class FactCheckDatabase:
             )
             await db.commit()
 
-    async def cleanup_old_data(self, days_to_keep: int = 90):
+    async def cleanup_old_data(self, days_to_keep: int | None = None):
         """Clean up old fact-check data to maintain database size."""
+        if days_to_keep is None:
+            days_to_keep = config.cleanup_retention_days
+
         cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+        logger.info(f'Cleaning up data older than {days_to_keep} days (before {cutoff_date})')
 
         async with aiosqlite.connect(self.db_path) as db:
             # Clean up old verified facts with low access count
-            await db.execute(
+            result = await db.execute(
                 """
                 DELETE FROM verified_facts
-                WHERE created_at < ? AND access_count < 2
+                WHERE created_at < ? AND access_count < ?
             """,
-                (cutoff_date,),
+                (cutoff_date, config.min_cache_access_count),
             )
+            deleted_facts = result.rowcount if result.rowcount else 0
+            logger.info(f'Deleted {deleted_facts} old verified facts with low access count')
 
             # Clean up old post analyses
-            await db.execute(
+            result = await db.execute(
                 """
                 DELETE FROM post_analyses
                 WHERE analysis_timestamp < ?
             """,
                 (cutoff_date,),
             )
+            deleted_analyses = result.rowcount if result.rowcount else 0
+            logger.info(f'Deleted {deleted_analyses} old post analyses')
 
             await db.commit()
 
     async def record_daily_metrics(self, metrics: dict[str, Any]):
         """Record daily performance metrics."""
         today = datetime.now().date()
+        logger.info(f'Recording daily metrics for {today}')
 
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
@@ -457,6 +487,7 @@ class FactCheckDatabase:
 
     async def get_trending_claims(self, days: int = 7, limit: int = 10) -> list[dict[str, Any]]:
         """Get trending/frequently appearing claims."""
+        logger.debug(f'Retrieving top {limit} trending claims from the past {days} days')
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
                 """
