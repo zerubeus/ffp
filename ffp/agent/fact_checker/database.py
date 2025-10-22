@@ -329,13 +329,14 @@ class FactCheckDatabase:
         """Get recent analysis history."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
-                f"""
+                """
                 SELECT post_id, post_url, overall_credibility, claims_count,
                        potential_misinformation, topic_sensitivity, analysis_timestamp
                 FROM post_analyses
-                WHERE analysis_timestamp > datetime('now', '-{days} days')
+                WHERE analysis_timestamp > datetime('now', ? || ' days')
                 ORDER BY analysis_timestamp DESC
-            """
+            """,
+                (f'-{days}',),
             ) as cursor:
                 rows = await cursor.fetchall()
 
@@ -458,16 +459,16 @@ class FactCheckDatabase:
         """Get trending/frequently appearing claims."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
-                f"""
+                """
                 SELECT original_claim, verdict, confidence, COUNT(*) as frequency
                 FROM verified_facts
-                WHERE created_at > datetime('now', '-{days} days')
+                WHERE created_at > datetime('now', ? || ' days')
                 GROUP BY claim_hash
                 HAVING frequency > 1
                 ORDER BY frequency DESC, created_at DESC
                 LIMIT ?
             """,
-                (limit,),
+                (f'-{days}', limit),
             ) as cursor:
                 rows = await cursor.fetchall()
 
