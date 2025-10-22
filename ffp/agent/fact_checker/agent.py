@@ -1,0 +1,479 @@
+"""
+Fact-checking agent for Palestine-related posts using PydanticAI.
+"""
+
+import asyncio
+import logging
+import time
+import uuid
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+
+from ffp.agent.fact_checker.claim_extractor import ClaimExtractor
+from ffp.agent.fact_checker.config import config
+from ffp.agent.fact_checker.database import FactCheckDatabase
+from ffp.agent.fact_checker.models import Claim, ClaimType, ConfidenceLevel, FactCheckVerdict, PalestineFactCheckContext, PostAnalysis
+from ffp.agent.fact_checker.tools import VerificationOrchestrator
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+
+@dataclass
+class FactCheckDependencies:
+    """Dependencies for the fact-checking agent."""
+
+    claim: Claim
+    context: PalestineFactCheckContext
+    evidence: Any
+    verifier: VerificationOrchestrator
+    database: FactCheckDatabase
+
+
+class VerdictOutput(BaseModel):
+    """Structured output for fact-checking verdict."""
+
+    verdict: str = Field(
+        description='Verdict: TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING',
+        pattern='^(TRUE|FALSE|PARTIALLY_TRUE|DISPUTED|UNVERIFIABLE|MISLEADING)$',
+    )
+    confidence: str = Field(
+        description='Confidence level: HIGH/MEDIUM/LOW/INSUFFICIENT', pattern='^(HIGH|MEDIUM|LOW|INSUFFICIENT)$'
+    )
+    explanation: str = Field(description='Detailed explanation (minimum 100 words)', min_length=100)
+    evidence_summary: str = Field(description='Summary of evidence found')
+    limitations: str | None = Field(default=None, description='Any limitations in verification')
+    context_needed: str | None = Field(default=None, description='Additional context needed if any')
+
+
+class PalestineFactCheckAgent:
+    """Main fact-checking agent for Palestine/Israel conflict-related posts."""
+
+    def __init__(self, api_key: str | None = None, db_path: str = 'fact_check.db'):
+        logger.info('Initializing PalestineFactCheckAgent')
+        self.claim_extractor = ClaimExtractor()
+        self.verifier = VerificationOrchestrator(api_key)
+        self.database = FactCheckDatabase(db_path)
+
+        # Initialize PydanticAI agent with specialized fact-checking capabilities
+        self.agent = Agent(
+            model=config.default_model,
+            deps_type=FactCheckDependencies,
+            output_type=VerdictOutput,
+            system_prompt=self._get_fact_check_prompt(),
+        )
+
+        # Register dynamic instructions
+        self._setup_dynamic_instructions()
+        logger.info('PalestineFactCheckAgent initialized successfully')
+
+    def _get_fact_check_prompt(self) -> str:
+        """Get the specialized fact-checking prompt for Palestine/Israel content."""
+        return """You are a specialized fact-checking agent focused on verifying claims about the Palestine-Israel conflict. Your role is to:
+
+1. **Analyze Evidence Objectively**: Evaluate all sources without bias, considering multiple perspectives while prioritizing factual accuracy.
+
+2. **Verify Statistical Claims**: Cross-reference casualty figures, displacement numbers, and demographic data with:
+   - UN OCHA (Office for the Coordination of Humanitarian Affairs)
+   - WHO (World Health Organization)
+   - UNRWA (UN Relief and Works Agency)
+   - Credible international NGOs (Human Rights Watch, Amnesty International, B'Tselem)
+   - Official government sources when appropriate
+
+3. **Historical Context Verification**: For historical claims, consult:
+   - Academic sources and peer-reviewed research
+   - Official UN resolutions and documentation
+   - Multiple historical archives and testimonies
+   - International court decisions (ICJ, ICC)
+
+4. **Legal Claims Assessment**: For international law references:
+   - Geneva Conventions and their interpretations
+   - UN Security Council resolutions
+   - International Court of Justice rulings
+   - Expert legal analysis from international law scholars
+
+5. **Source Credibility Evaluation**: Consider the following factors:
+   - Source methodology and transparency
+   - Historical accuracy record
+   - Potential bias and conflicts of interest
+   - Verification by independent sources
+   - Proximity to events (primary vs secondary sources)
+
+6. **Sensitive Content Guidelines**:
+   - Acknowledge the complexity and sensitivity of the conflict
+   - Avoid inflammatory language while maintaining factual accuracy
+   - Distinguish between verified facts and disputed claims
+   - Highlight when claims require additional context
+   - Flag content that may be propaganda or deliberately misleading
+
+7. **Verdict Categories**:
+   - TRUE: Verified by multiple credible sources
+   - FALSE: Contradicted by reliable evidence
+   - PARTIALLY_TRUE: Contains some accurate elements but misleading overall
+   - DISPUTED: Sources contradict each other significantly
+   - UNVERIFIABLE: Insufficient evidence available
+   - MISLEADING: Technically accurate but lacks crucial context
+
+8. **Special Considerations for Palestine/Israel Content**:
+   - Casualty figures: Verify methodology and source reliability
+   - Settlement activity: Cross-reference with UN monitoring reports
+   - Military operations: Distinguish between official statements and verified facts
+   - Human rights violations: Require documentation from credible monitoring organizations
+   - Legal status claims: Reference international law and court decisions
+   - Historical events: Verify with multiple academic and archival sources
+
+9. **Red Flags to Watch For**:
+   - Unverified social media videos or images
+   - Emotional language designed to inflame rather than inform
+   - Claims without specific dates, locations, or sources
+   - Statistics without methodology or source attribution
+   - One-sided narratives that ignore complexity
+   - Conspiracy theories or antisemitic/islamophobic content
+
+10. **Output Requirements**:
+    - Provide clear, evidence-based verdicts
+    - Cite specific sources for verification
+    - Explain limitations in available evidence
+    - Suggest additional context when helpful
+    - Maintain professional, neutral tone
+    - Be transparent about confidence levels
+
+Remember: Your goal is to provide accurate, nuanced fact-checking that helps readers understand the factual basis of claims while acknowledging the complexity of this conflict. Prioritize truth and evidence over any particular political narrative."""
+
+    def _setup_dynamic_instructions(self):
+        """Set up dynamic instructions for context-aware fact-checking."""
+
+        @self.agent.system_prompt
+        async def add_context_info(ctx: RunContext[FactCheckDependencies]) -> str:  # pyright: ignore[reportUnusedFunction]
+            """Add context-specific instructions based on the claim type."""
+            claim = ctx.deps.claim
+            context = ctx.deps.context
+
+            instructions: list[str] = []
+
+            if claim.claim_type == ClaimType.CASUALTY:
+                instructions.append(
+                    'Pay special attention to casualty figure verification. '
+                    'Cross-reference with UN OCHA, WHO, and health ministry data. '
+                    'Note any discrepancies in methodology or reporting.'
+                )
+
+            if context.involves_settlements:
+                instructions.append(
+                    'Verify settlement-related claims against UN monitoring reports '
+                    'and international law documentation.'
+                )
+
+            if context.involves_international_law:
+                instructions.append(
+                    'Assess legal claims against Geneva Conventions, ICJ rulings, and UN Security Council resolutions.'
+                )
+
+            if context.involves_historical_events:
+                instructions.append(
+                    'Cross-reference historical claims with multiple academic sources and official archives.'
+                )
+
+            return '\n'.join(instructions) if instructions else ''
+
+    async def setup(self):
+        """Initialize the fact-checking agent."""
+        await self.database.setup_database()
+
+    async def analyze_post(self, post_text: str, post_url: str | None = None) -> PostAnalysis:
+        """Analyze a complete social media post for factual claims."""
+        start_time = time.time()
+
+        # Generate unique post ID
+        post_id = str(uuid.uuid4())
+        logger.info(f'Starting analysis for post {post_id}')
+
+        # Extract claims from the post
+        claims = await self.claim_extractor.extract_claims(post_text)
+        logger.info(f'Extracted {len(claims)} claims from post {post_id}')
+
+        if not claims:
+            # No factual claims found
+            logger.info(f'No claims found in post {post_id}')
+            return PostAnalysis(
+                post_id=post_id,
+                post_url=post_url,
+                post_text=post_text,
+                claims=[],
+                verdicts=[],
+                overall_credibility=ConfidenceLevel.HIGH,
+                topic_sensitivity='normal',
+            )
+
+        # Get Palestine-specific context
+        palestine_context = self.claim_extractor.get_palestine_context(claims)
+        logger.debug(f'Palestine context for post {post_id}: {palestine_context}')
+
+        # Verify each claim in parallel using asyncio.gather
+        logger.info(f'Verifying {len(claims)} claims in parallel for post {post_id}')
+        verification_tasks = [
+            self._verify_claim_with_pydantic(claim, palestine_context)
+            for claim in claims
+        ]
+        verdicts = await asyncio.gather(*verification_tasks)
+        logger.info(f'Completed verification of {len(verdicts)} claims for post {post_id}')
+
+        # Calculate overall credibility and determine flags
+        overall_credibility = self._calculate_overall_credibility(verdicts)
+        warning_flags = self._generate_warning_flags(claims, verdicts, palestine_context)
+
+        # Determine if human review is needed
+        requires_review = self._requires_human_review(verdicts, palestine_context)
+
+        # Determine topic sensitivity
+        topic_sensitivity = self._assess_topic_sensitivity(palestine_context)
+
+        analysis = PostAnalysis(
+            post_id=post_id,
+            post_url=post_url,
+            post_text=post_text,
+            claims=claims,
+            verdicts=list(verdicts),
+            overall_credibility=overall_credibility,
+            potential_misinformation=any(v.verdict in ['FALSE', 'MISLEADING'] for v in verdicts),
+            requires_human_review=requires_review,
+            topic_sensitivity=topic_sensitivity,
+            warning_flags=warning_flags,
+        )
+
+        # Store analysis in database
+        await self.database.store_post_analysis(analysis)
+
+        processing_time = time.time() - start_time
+        logger.info(f'Fact-check completed for post {post_id} in {processing_time:.2f} seconds')
+
+        return analysis
+
+    async def _verify_claim_with_pydantic(self, claim: Claim, context: PalestineFactCheckContext) -> FactCheckVerdict:
+        """Verify a single claim using PydanticAI and external sources."""
+        logger.debug(f'Verifying claim {claim.id}: {claim.text[:50]}...')
+
+        # Check database cache first
+        cached_verdict = await self.database.lookup_claim(claim.text)
+        if cached_verdict and cached_verdict.confidence in [ConfidenceLevel.HIGH, ConfidenceLevel.MEDIUM]:
+            logger.info(f'Cache hit for claim {claim.id}')
+            return cached_verdict
+
+        logger.debug(f'Cache miss for claim {claim.id}, gathering evidence')
+
+        # Gather evidence from external sources
+        evidence = await self.verifier.verify_claim(claim.text, claim.claim_type.value)
+        logger.info(f'Gathered {len(evidence.sources)} sources for claim {claim.id}')
+
+        # Prepare context for the agent
+        context_info = self._format_context_for_agent(claim, context, evidence)
+
+        # Create dependencies for the agent
+        deps = FactCheckDependencies(
+            claim=claim, context=context, evidence=evidence, verifier=self.verifier, database=self.database
+        )
+
+        # Prepare the prompt for the agent
+        prompt = f"""Fact-check this claim: "{claim.text}"
+
+Context: {context_info}
+
+Evidence found: {self._format_evidence_for_agent(evidence)}
+
+Please provide a structured fact-check verdict with:
+1. Verdict (TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING)
+2. Confidence level (HIGH/MEDIUM/LOW/INSUFFICIENT)
+3. Detailed explanation (minimum {config.min_explanation_length} words)
+4. Evidence summary
+5. Any limitations in verification
+6. Additional context needed (if any)"""
+
+        try:
+            # Run the PydanticAI agent
+            logger.debug(f'Running PydanticAI agent for claim {claim.id}')
+            result = await self.agent.run(prompt, deps=deps)
+
+            # Convert the structured output to FactCheckVerdict
+            verdict = FactCheckVerdict(
+                claim_id=claim.id,
+                verdict=result.output.verdict,
+                confidence=ConfidenceLevel(result.output.confidence.lower()),
+                explanation=result.output.explanation,
+                evidence_summary=result.output.evidence_summary,
+                sources_consulted=[s.url for s in evidence.sources],
+                limitations=result.output.limitations,
+                context_needed=result.output.context_needed,
+                sensitive_topic=self._is_sensitive_claim(claim, context),
+            )
+
+            logger.info(f'Verdict for claim {claim.id}: {verdict.verdict} (confidence: {verdict.confidence.value})')
+
+            # Store in database for future reference
+            await self.database.store_verification(verdict)
+
+            return verdict
+
+        except Exception as e:
+            # Fallback verdict if agent fails
+            logger.error(f'Error verifying claim {claim.id}: {str(e)}', exc_info=True)
+            return FactCheckVerdict(
+                claim_id=claim.id,
+                verdict='UNVERIFIABLE',
+                confidence=ConfidenceLevel.INSUFFICIENT,
+                explanation=f'Unable to verify claim due to technical error: {str(e)}',
+                evidence_summary='No evidence could be gathered',
+                sources_consulted=[],
+                limitations='Technical error prevented full verification',
+                context_needed=None,
+                sensitive_topic=self._is_sensitive_claim(claim, context),
+            )
+
+    def _format_context_for_agent(self, claim: Claim, context: PalestineFactCheckContext, evidence: Any) -> str:
+        """Format context information for agent analysis."""
+        context_parts: list[str] = []
+
+        if claim.location_context:
+            context_parts.append(f'Location: {claim.location_context}')
+
+        if claim.temporal_context:
+            context_parts.append(f'Time period: {claim.temporal_context}')
+
+        if context.involves_casualties:
+            context_parts.append('Involves casualty figures')
+
+        if context.involves_settlements:
+            context_parts.append('Involves settlement activity')
+
+        if context.involves_international_law:
+            context_parts.append('Involves international law')
+
+        if context.geographical_scope:
+            context_parts.append(f'Geographic scope: {context.geographical_scope}')
+
+        return '; '.join(context_parts) if context_parts else 'General Palestine/Israel conflict context'
+
+    def _format_evidence_for_agent(self, evidence: Any) -> str:
+        """Format evidence sources for agent analysis."""
+        if not evidence.sources:
+            return 'No external sources found'
+
+        source_summaries: list[str] = []
+        for source in evidence.sources[:config.max_sources_per_evidence]:
+            summary = (
+                f'- {source.domain} (credibility: {source.credibility_score:.2f}): {source.relevant_excerpt[:200]}'
+            )
+            source_summaries.append(summary)
+
+        return '\n'.join(source_summaries)
+
+    def _calculate_overall_credibility(self, verdicts: list[FactCheckVerdict]) -> ConfidenceLevel:
+        """Calculate overall credibility based on individual verdicts."""
+        if not verdicts:
+            return ConfidenceLevel.HIGH
+
+        false_count = sum(1 for v in verdicts if v.verdict in ['FALSE', 'MISLEADING'])
+        disputed_count = sum(1 for v in verdicts if v.verdict in ['DISPUTED', 'UNVERIFIABLE'])
+
+        total_verdicts = len(verdicts)
+
+        if false_count / total_verdicts > config.false_verdict_threshold:
+            return ConfidenceLevel.LOW
+        elif (false_count + disputed_count) / total_verdicts > config.disputed_verdict_threshold:
+            return ConfidenceLevel.MEDIUM
+        else:
+            return ConfidenceLevel.HIGH
+
+    def _generate_warning_flags(
+        self, claims: list[Claim], verdicts: list[FactCheckVerdict], context: PalestineFactCheckContext
+    ) -> list[str]:
+        """Generate warning flags for the post."""
+        flags: list[str] = []
+
+        if any(v.verdict == 'FALSE' for v in verdicts):
+            flags.append('Contains false information')
+
+        if any(v.verdict == 'MISLEADING' for v in verdicts):
+            flags.append('Contains misleading claims')
+
+        if context.involves_casualties and any(c.claim_type == ClaimType.CASUALTY for c in claims):
+            flags.append('Contains casualty figures - verify with official sources')
+
+        if len([v for v in verdicts if v.verdict == 'DISPUTED']) > 1:
+            flags.append('Multiple disputed claims')
+
+        if any(v.confidence == ConfidenceLevel.INSUFFICIENT for v in verdicts):
+            flags.append('Some claims could not be verified')
+
+        return flags
+
+    def _requires_human_review(self, verdicts: list[FactCheckVerdict], context: PalestineFactCheckContext) -> bool:
+        """Determine if human review is required."""
+        # Require review for sensitive or complex cases
+        if context.involves_human_rights or context.involves_international_law:
+            logger.debug('Human review required due to sensitive content')
+            return True
+
+        if any(v.verdict in ['DISPUTED', 'MISLEADING'] for v in verdicts):
+            logger.debug('Human review required due to disputed/misleading verdicts')
+            return True
+
+        insufficient_count = len([v for v in verdicts if v.confidence == ConfidenceLevel.INSUFFICIENT])
+        if insufficient_count > config.min_insufficient_confidence_for_review:
+            logger.debug(f'Human review required due to {insufficient_count} insufficient confidence verdicts')
+            return True
+
+        return False
+
+    def _assess_topic_sensitivity(self, context: PalestineFactCheckContext) -> str:
+        """Assess the sensitivity level of the topic."""
+        if context.involves_casualties or context.involves_human_rights:
+            return 'highly_sensitive'
+        elif context.involves_settlements or context.involves_international_law:
+            return 'sensitive'
+        else:
+            return 'normal'
+
+    def _is_sensitive_claim(self, claim: Claim, context: PalestineFactCheckContext | None) -> bool:
+        """Determine if a claim involves sensitive topics."""
+        sensitive_keywords = [
+            'killed',
+            'dead',
+            'murdered',
+            'massacre',
+            'genocide',
+            'ethnic cleansing',
+            'war crime',
+            'torture',
+            'children',
+            'civilians',
+            'hospital',
+            'school',
+        ]
+
+        return any(keyword in claim.text.lower() for keyword in sensitive_keywords)
+
+    async def get_analysis_summary(self, days: int | None = None) -> dict[str, Any]:
+        """Get a summary of recent fact-checking activity."""
+        if days is None:
+            days = config.analysis_history_days
+
+        logger.info(f'Generating analysis summary for the past {days} days')
+        history = await self.database.get_analysis_history(days)
+        cache_stats = await self.database.get_cache_statistics()
+        trending = await self.database.get_trending_claims(days)
+
+        return {
+            'recent_analyses': len(history),
+            'high_credibility_posts': len([h for h in history if h['overall_credibility'] == 'high']),
+            'potential_misinformation': len([h for h in history if h['potential_misinformation']]),
+            'sensitive_topics': len([h for h in history if h['topic_sensitivity'] != 'normal']),
+            'cache_statistics': cache_stats,
+            'trending_claims': trending[:config.trending_claims_limit],
+        }

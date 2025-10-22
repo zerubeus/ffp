@@ -5,7 +5,7 @@ from ffp.config.config import config
 from ffp.database.database_factory import get_database
 
 
-async def show_errors(hours: int = None, limit: int = None):
+async def show_errors(hours: int | None = None, limit: int | None = None):
     """Display recent errors from the database."""
     # Use config defaults if not provided
     if hours is None:

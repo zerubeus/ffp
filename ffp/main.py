@@ -1,6 +1,7 @@
 import asyncio
 import signal
 import sys
+from typing import Any
 
 from ffp.client.telegram_client import TelegramMonitor
 from ffp.client.twitter_client import TwitterClient
@@ -89,7 +90,7 @@ class TelegramToTwitterBridge:
                 logger.error(f'Error processing messages: {e}')
                 await asyncio.sleep(config.app.retry_delay_seconds)
 
-    async def post_to_twitter(self, message: dict) -> str:
+    async def post_to_twitter(self, message: dict[str, Any]) -> str | None:
         """Post message to Twitter - text only."""
         try:
             # Always post text only
@@ -140,7 +141,7 @@ async def main():
     shutdown_event = asyncio.Event()
 
     # Set up signal handlers
-    def signal_handler(sig, frame):
+    def signal_handler(sig: int, frame: Any) -> None:
         logger.info('Received interrupt signal')
         shutdown_event.set()
 

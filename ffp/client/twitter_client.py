@@ -32,8 +32,8 @@ class TwitterClient:
             if len(text) > 280:
                 text = text[:277] + '...'
 
-            response = self.client.create_tweet(text=text)
-            tweet_id = response.data['id']
+            response = self.client.create_tweet(text=text)  # type: ignore[misc]
+            tweet_id = str(response.data['id'])  # type: ignore[index]
             logger.info(f'Posted tweet: {tweet_id}')
             return tweet_id
 

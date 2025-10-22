@@ -23,9 +23,14 @@ async def authenticate():
     print('You will be asked for the verification code sent to your Telegram app.')
     print('This only needs to be done once.\n')
 
+    # Type narrowing - we know these are not None after the check above
+    assert api_id is not None
+    assert api_hash is not None
+    assert phone is not None
+
     client = TelegramClient(session_name, int(api_id), api_hash)
 
-    await client.start(phone=phone)
+    await client.start(phone=phone)  # type: ignore[misc]
 
     print('\n✅ Authentication successful!')
     print(f'Session file created: {session_name}.session')
@@ -36,9 +41,11 @@ async def authenticate():
 
     # Test the connection
     me = await client.get_me()
-    print(f'\nLogged in as: {me.first_name} {me.last_name or ""}')
+    first_name = getattr(me, 'first_name', 'Unknown')
+    last_name = getattr(me, 'last_name', '')
+    print(f'\nLogged in as: {first_name} {last_name or ""}')
 
-    await client.disconnect()
+    await client.disconnect()  # type: ignore[misc]
 
 
 if __name__ == '__main__':

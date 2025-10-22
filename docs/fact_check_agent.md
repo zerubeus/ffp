@@ -226,18 +226,45 @@ flowchart LR
 
 ### 1. Agent Framework (PydanticAI)
 
-The agent uses PydanticAI for structured AI interactions with strict type safety and validation:
+The agent uses PydanticAI for structured AI interactions with specialized fact-checking capabilities:
 
 ```python
-from pydantic_ai import Agent
-from pydantic import BaseModel
-from typing import List, Optional, Union
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from dataclasses import dataclass
 
-class FactCheckAgent(Agent):
+@dataclass
+class FactCheckDependencies:
+    """Dependencies for the fact-checking agent."""
+    claim: Claim
+    context: PalestineFactCheckContext
+    evidence: Evidence
+    verifier: VerificationOrchestrator
+    database: FactCheckDatabase
+
+class VerdictOutput(BaseModel):
+    """Structured output for fact-checking verdict."""
+    verdict: str = Field(description='Verdict: TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING')
+    confidence: str = Field(description='Confidence level: HIGH/MEDIUM/LOW/INSUFFICIENT')
+    explanation: str = Field(description='Detailed explanation', min_length=100)
+    evidence_summary: str = Field(description='Summary of evidence found')
+    limitations: str | None = Field(default=None)
+    context_needed: str | None = Field(default=None)
+
+class PalestineFactCheckAgent:
     """Main fact-checking agent orchestrating all verification processes."""
-    model = "gpt-4-turbo"  # or claude-3-sonnet
-    system_prompt = """You are a fact-checking agent that identifies claims
-                      in social media posts and verifies them using multiple sources."""
+
+    def __init__(self, api_key: str | None = None, db_path: str = 'fact_check.db'):
+        self.agent = Agent(
+            'anthropic:claude-3-sonnet',
+            deps_type=FactCheckDependencies,
+            result_type=VerdictOutput,
+            system_prompt=self._get_fact_check_prompt()
+        )
+
+    def _get_fact_check_prompt(self) -> str:
+        return """You are a specialized fact-checking agent focused on verifying claims
+                 about the Palestine-Israel conflict with objective analysis..."""
 ```
 
 ### 2. Data Models
@@ -321,7 +348,6 @@ The claim extraction system uses advanced NLP techniques to identify factual ass
 ```python
 import spacy
 from transformers import pipeline
-from typing import List, Tuple
 
 class ClaimExtractor:
     """Extracts factual claims from social media posts using NLP."""
@@ -334,7 +360,7 @@ class ClaimExtractor:
         )
         self.ner_pipeline = pipeline("ner", aggregation_strategy="simple")
 
-    async def extract_claims(self, text: str) -> List[Claim]:
+    async def extract_claims(self, text: str) -> list[Claim]:
         """Extract factual claims from input text."""
         doc = self.nlp(text)
         sentences = [sent.text.strip() for sent in doc.sents]
@@ -383,7 +409,7 @@ class ClaimExtractor:
 
 ```python
 import aiohttp
-from typing import List, Dict, Any
+from typing import Any
 
 class WebSearchTool:
     """Tool for searching the web to find relevant information."""
@@ -392,7 +418,7 @@ class WebSearchTool:
         self.api_key = api_key
         self.base_url = "https://api.bing.microsoft.com/v7.0/search"
 
-    async def search(self, query: str, num_results: int = 10) -> List[Dict[str, Any]]:
+    async def search(self, query: str, num_results: int = 10) -> list[dict[str, Any]]:
         """Search the web for information about a claim."""
         headers = {"Ocp-Apim-Subscription-Key": self.api_key}
         params = {
@@ -458,7 +484,6 @@ class FactCheckingSitesTool:
 ```python
 import sqlite3
 import aiosqlite
-from typing import Optional, List
 
 class KnowledgeBase:
     """Local knowledge base for storing verified facts and claims."""
@@ -532,103 +557,175 @@ class KnowledgeBase:
 
 ```python
 from pydantic_ai import Agent, RunContext
-from typing import List, Annotated
+import uuid
 
-class FactCheckAgent(Agent[None, PostAnalysis]):
+class PalestineFactCheckAgent:
     """Main fact-checking agent that orchestrates the entire verification process."""
 
-    model = "gpt-4-turbo"
-    system_prompt = """
-    You are an expert fact-checking agent. Your role is to:
-    1. Identify factual claims in social media posts
-    2. Gather evidence from multiple reliable sources
-    3. Provide balanced, evidence-based verdicts
-    4. Explain your reasoning clearly and concisely
-
-    Always prioritize accuracy over speed and cite your sources.
-    """
-
-    def __init__(self):
-        super().__init__()
+    def __init__(self, api_key: str | None = None, db_path: str = 'fact_check.db'):
         self.claim_extractor = ClaimExtractor()
-        self.web_search = WebSearchTool(api_key=os.getenv("BING_API_KEY"))
-        self.fact_check_sites = FactCheckingSitesTool()
-        self.knowledge_base = KnowledgeBase("fact_check.db")
+        self.verifier = VerificationOrchestrator(api_key)
+        self.database = FactCheckDatabase(db_path)
 
-    @tool
-    async def extract_claims_tool(self, ctx: RunContext[None], post_text: str) -> List[Claim]:
+        # Initialize PydanticAI agent with specialized fact-checking capabilities
+        self.agent = Agent(
+            'anthropic:claude-3-sonnet',
+            deps_type=FactCheckDependencies,
+            result_type=VerdictOutput,
+            system_prompt=self._get_fact_check_prompt()
+        )
+
+        # Register dynamic instructions
+        self._setup_dynamic_instructions()
+
+    def _get_fact_check_prompt(self) -> str:
+        """Get the specialized fact-checking prompt for Palestine/Israel content."""
+        return """You are a specialized fact-checking agent focused on verifying claims
+        about the Palestine-Israel conflict. Your role is to:
+        1. Analyze evidence objectively without bias
+        2. Verify statistical claims against UN and NGO sources
+        3. Cross-reference historical claims with academic sources
+        4. Assess legal claims against international law
+        5. Evaluate source credibility and methodology
+        6. Provide clear, evidence-based verdicts
+        """
+
+    def _setup_dynamic_instructions(self):
+        """Set up dynamic instructions for context-aware fact-checking."""
+
+        @self.agent.system_prompt
+        async def add_context_info(ctx: RunContext[FactCheckDependencies]) -> str:
+            """Add context-specific instructions based on the claim type."""
+            claim = ctx.deps.claim
+            context = ctx.deps.context
+
+            instructions = []
+
+            if claim.claim_type == ClaimType.CASUALTY:
+                instructions.append('Pay special attention to casualty figure verification.')
+
+            if context.involves_settlements:
+                instructions.append('Verify settlement-related claims against UN monitoring reports.')
+
+            return '\n'.join(instructions) if instructions else ''
+
+    async def extract_claims(self, post_text: str) -> List[Claim]:
         """Extract factual claims from a social media post."""
         return await self.claim_extractor.extract_claims(post_text)
 
-    @tool
-    async def verify_claim_tool(
-        self,
-        ctx: RunContext[None],
-        claim: Claim
-    ) -> FactCheckVerdict:
-        """Verify a single claim using multiple sources."""
+    async def verify_claim_with_pydantic(self, claim: Claim, context: PalestineFactCheckContext) -> FactCheckVerdict:
+        """Verify a single claim using PydanticAI and external sources."""
 
-        # Check knowledge base first
-        existing = await self.knowledge_base.lookup_claim(claim.text)
-        if existing and existing.confidence in [ConfidenceLevel.HIGH, ConfidenceLevel.MEDIUM]:
-            return existing
+        # Check database cache first
+        cached_verdict = await self.database.lookup_claim(claim.text)
+        if cached_verdict and cached_verdict.confidence in [ConfidenceLevel.HIGH, ConfidenceLevel.MEDIUM]:
+            return cached_verdict
 
-        # Gather evidence from multiple sources
-        evidence_sources = []
+        # Gather evidence from external sources
+        evidence = await self.verifier.verify_claim(claim.text, claim.claim_type.value)
 
-        # Search fact-checking sites
-        fact_check_sources = await self.fact_check_sites.search_fact_checkers(claim.text)
-        evidence_sources.extend(fact_check_sources)
-
-        # General web search
-        web_results = await self.web_search.search(claim.text)
-        for result in web_results[:5]:  # Top 5 results
-            source = EvidenceSource(
-                url=result["url"],
-                title=result["name"],
-                domain=self._extract_domain(result["url"]),
-                credibility_score=self._assess_domain_credibility(result["url"]),
-                relevant_excerpt=result.get("snippet", ""),
-                source_type="web"
-            )
-            evidence_sources.append(source)
-
-        # Analyze evidence and form verdict
-        evidence = Evidence(
-            claim_id=claim.id,
-            sources=evidence_sources
+        # Create dependencies for the agent
+        deps = FactCheckDependencies(
+            claim=claim,
+            context=context,
+            evidence=evidence,
+            verifier=self.verifier,
+            database=self.database
         )
 
-        verdict = await self._form_verdict(claim, evidence)
+        # Prepare the prompt for the agent
+        prompt = f'''Fact-check this claim: "{claim.text}"
 
-        # Store for future reference
-        await self.knowledge_base.store_verification(verdict)
+Context: {self._format_context_for_agent(claim, context, evidence)}
 
-        return verdict
+Evidence found: {self._format_evidence_for_agent(evidence)}
+
+Please provide a structured fact-check verdict with:
+1. Verdict (TRUE/FALSE/PARTIALLY_TRUE/DISPUTED/UNVERIFIABLE/MISLEADING)
+2. Confidence level (HIGH/MEDIUM/LOW/INSUFFICIENT)
+3. Detailed explanation (minimum 100 words)
+4. Evidence summary
+5. Any limitations in verification'''
+
+        try:
+            # Run the PydanticAI agent
+            result = await self.agent.run(prompt, deps=deps)
+
+            # Convert the structured output to FactCheckVerdict
+            verdict = FactCheckVerdict(
+                claim_id=claim.id,
+                verdict=result.data.verdict,
+                confidence=ConfidenceLevel(result.data.confidence.lower()),
+                explanation=result.data.explanation,
+                evidence_summary=result.data.evidence_summary,
+                sources_consulted=[s.url for s in evidence.sources],
+                limitations=result.data.limitations,
+                context_needed=result.data.context_needed,
+                sensitive_topic=self._is_sensitive_claim(claim, context)
+            )
+
+            # Store in database for future reference
+            await self.database.store_verification(verdict)
+
+            return verdict
+
+        except Exception as e:
+            # Fallback verdict if agent fails
+            return FactCheckVerdict(
+                claim_id=claim.id,
+                verdict='UNVERIFIABLE',
+                confidence=ConfidenceLevel.INSUFFICIENT,
+                explanation=f'Unable to verify claim due to technical error: {str(e)}',
+                evidence_summary='No evidence could be gathered',
+                sources_consulted=[]
+            )
 
     async def analyze_post(self, post_text: str, post_url: str = None) -> PostAnalysis:
         """Analyze a complete social media post for factual claims."""
 
+        post_id = str(uuid.uuid4())
+
         # Extract claims
-        claims = await self.extract_claims_tool(post_text)
+        claims = await self.extract_claims(post_text)
+
+        if not claims:
+            return PostAnalysis(
+                post_id=post_id,
+                post_url=post_url,
+                post_text=post_text,
+                claims=[],
+                verdicts=[],
+                overall_credibility=ConfidenceLevel.HIGH,
+                topic_sensitivity='normal'
+            )
+
+        # Get Palestine-specific context
+        palestine_context = self.claim_extractor.get_palestine_context(claims)
 
         # Verify each claim
         verdicts = []
         for claim in claims:
-            verdict = await self.verify_claim_tool(claim)
+            verdict = await self.verify_claim_with_pydantic(claim, palestine_context)
             verdicts.append(verdict)
 
         # Calculate overall credibility
         overall_credibility = self._calculate_overall_credibility(verdicts)
 
-        return PostAnalysis(
-            post_id=self._generate_post_id(post_text),
+        analysis = PostAnalysis(
+            post_id=post_id,
             post_url=post_url,
             post_text=post_text,
             claims=claims,
             verdicts=verdicts,
-            overall_credibility=overall_credibility
+            overall_credibility=overall_credibility,
+            potential_misinformation=any(v.verdict in ['FALSE', 'MISLEADING'] for v in verdicts),
+            topic_sensitivity=self._assess_topic_sensitivity(palestine_context)
         )
+
+        # Store analysis in database
+        await self.database.store_post_analysis(analysis)
+
+        return analysis
 ```
 
 ### 6. Database Integration
@@ -739,7 +836,7 @@ Add to `.env.example`:
 ```bash
 # Fact-checking configuration
 BING_SEARCH_API_KEY=your_bing_api_key
-OPENAI_API_KEY=your_openai_key  # For PydanticAI
+ANTHROPIC_API_KEY=your_anthropic_api_key  # For PydanticAI with Claude models
 FACT_CHECK_ENABLED=true
 FACT_CHECK_CONFIDENCE_THRESHOLD=0.6
 FACT_CHECK_CACHE_TTL_HOURS=24
@@ -755,12 +852,12 @@ CUSTOM_CLAIM_MODEL_PATH=./models/claim_classifier
 import pytest
 from unittest.mock import AsyncMock, patch
 
-class TestFactCheckAgent:
+class TestPalestineFactCheckAgent:
 
     @pytest.fixture
     async def agent(self):
-        agent = FactCheckAgent()
-        await agent.knowledge_base.setup_database()
+        agent = PalestineFactCheckAgent()
+        await agent.database.setup_database()
         return agent
 
     @pytest.mark.asyncio
@@ -768,7 +865,7 @@ class TestFactCheckAgent:
         """Test claim extraction from sample posts."""
         post_text = "COVID-19 vaccines are 95% effective and have been tested on over 40,000 people."
 
-        claims = await agent.extract_claims_tool(post_text)
+        claims = await agent.extract_claims(post_text)
 
         assert len(claims) >= 1
         assert any("95%" in claim.text for claim in claims)
@@ -786,7 +883,7 @@ class TestFactCheckAgent:
             keywords=["Earth", "round"]
         )
 
-        with patch.object(agent.web_search, 'search') as mock_search:
+        with patch.object(agent.verifier.web_search, 'search') as mock_search:
             mock_search.return_value = [
                 {
                     "url": "https://nasa.gov/earth-is-round",
@@ -795,7 +892,8 @@ class TestFactCheckAgent:
                 }
             ]
 
-            verdict = await agent.verify_claim_tool(claim)
+            palestine_context = agent.claim_extractor.get_palestine_context([claim])
+            verdict = await agent.verify_claim_with_claude(claim, palestine_context)
 
             assert verdict.verdict == "TRUE"
             assert verdict.confidence in [ConfidenceLevel.HIGH, ConfidenceLevel.MEDIUM]
@@ -812,8 +910,8 @@ class TestFactCheckAgent:
             sources_consulted=["nasa.gov", "scientificamerican.com"]
         )
 
-        await agent.knowledge_base.store_verification(verdict)
-        retrieved = await agent.knowledge_base.lookup_claim("test_claim")
+        await agent.database.store_verification(verdict)
+        retrieved = await agent.database.lookup_claim("test_claim")
 
         assert retrieved is not None
         assert retrieved.verdict == "TRUE"
@@ -829,7 +927,7 @@ Extend the existing message processor to include optional fact-checking:
 class MessageProcessor:
     def __init__(self, config):
         self.config = config
-        self.fact_checker = FactCheckAgent() if config.fact_check_enabled else None
+        self.fact_checker = PalestineFactCheckAgent() if config.fact_check_enabled else None
 
     async def process_message(self, message_data):
         """Process message with optional fact-checking."""

@@ -1,5 +1,6 @@
 import logging
 import re
+from typing import Any
 
 from ffp.config.config import config
 
@@ -15,7 +16,7 @@ class MessageProcessor:
         self.default_hashtags = ['#FreePalestine', '#Palestine']
         self.max_tweet_length = config.app.max_tweet_length
 
-    def process_message(self, message_data: dict) -> dict:
+    def process_message(self, message_data: dict[str, Any]) -> dict[str, Any]:
         """Process Telegram message for Twitter posting - text only."""
         processed = {
             'original_id': message_data['id'],
@@ -72,7 +73,7 @@ class MessageProcessor:
         """Add hashtags to text if space permits."""
         # Check if text already has our hashtags
         existing_tags = re.findall(r'#\w+', text.lower())
-        tags_to_add = []
+        tags_to_add: list[str] = []
 
         for tag in self.default_hashtags:
             if tag.lower() not in existing_tags:
@@ -89,7 +90,7 @@ class MessageProcessor:
 
         return text
 
-    def _should_filter(self, message_data: dict) -> bool:
+    def _should_filter(self, message_data: dict[str, Any]) -> bool:
         """Determine if message should be filtered out."""
         text = message_data.get('text', '').lower()
 
@@ -109,9 +110,9 @@ class MessageProcessor:
 
         return False
 
-    def format_thread(self, messages: list) -> list:
+    def format_thread(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Format multiple messages as a Twitter thread."""
-        thread = []
+        thread: list[dict[str, Any]] = []
 
         for i, msg in enumerate(messages):
             processed = self.process_message(msg)
